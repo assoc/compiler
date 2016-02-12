@@ -1,0 +1,6 @@
+Var ax,b,cad,d
+ax=5
+b=14
+cad=-8
+d=2*(b-ax)+cad
+cad=cad-2.
