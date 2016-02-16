@@ -1,6 +1,10 @@
-Var ax,b,cad,d
-ax=5
-b=14
-cad=-8
-d=2*(b-ax)+cad
-cad=cad-2.
+Var ax, b, c, d
+ax = 5 
+b = 66
+c = -2
+d = 6 * (b - a)
+d=-d
+ax=d/-3
+ax=((((ax)))+8-5)
+d=ax/10/5
+c=2*((b-ax))+((10*(((c))))-11).
