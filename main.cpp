@@ -4,21 +4,48 @@
 #include <vector>
 #include <stack>
 
-enum lexem_class {UNDEFINED, DECL, IDENT, CONST, NEWLINE, PLUS, MINUS, TIMES, SLASH, EQUAL, COMMA, PERIOD, L_PAR, R_PAR};
+enum lclass {UNDEFINED, DECL, IDENT, CONST, NEWLINE, PLUS, MINUS, TIMES, SLASH, EQUAL, COMMA, PERIOD, L_PAR, R_PAR};
+std::string types[14] = {"UNDEFINED", "DECL", "IDENT", "CONST", "NEWLINE", "PLUS", "MINUS", "TIMES", "SLASH", "EQUAL", "COMMA", "PERIOD", "L_PAR", "R_PAR"};
+
+typedef struct lexem_s {
+  lclass type;
+  unsigned line;
+  char *name;
+} lexem_s;
+
+lexem_s temp;
+std::vector<lexem_s> lexems;
 unsigned actual_line;
 
-class lexem {
-public:
-  lexem() {set("", UNDEFINED, 0);}
-  lexem(std::string lexem, lexem_class type, unsigned line) {set(lexem, type, line);}
-  ~lexem() {}
-  void set(std::string lexem, lexem_class type, unsigned line) {lexem_ = lexem, type_ = type; line_ = line;}
-  std::string lexem_;
-  lexem_class type_;
-  unsigned line_;
-};
+lclass symbol;
+int errors, iterator;
 
-std::vector<lexem> lexems;
+char* allocate_char(char* name, size_t len) {
+  char *t = new char[len];
+  if (t) {
+    for (char i = 0; i < len; i++) {t[i] = name[i];}
+    return t;
+  }
+  return 0;
+}
+
+void add(lclass type, char* name, size_t len) {
+  temp.line = actual_line;
+  temp.type = type;
+  temp.name = allocate_char(name, len);
+  lexems.push_back(temp);
+}
+void add(lclass type) {
+  temp.line = actual_line;
+  temp.type = type;
+  temp.name = 0;
+  lexems.push_back(temp);
+}
+void deallocate_all() {
+  for (int i = 0; i < lexems.size(); i++) {
+    if (temp.name) delete[] temp.name;
+  }
+}
 
 bool is_alpha(char c) {return (c >= 'a' && c <= 'z') ? 1 : 0;}
 bool is_digit(char c) {return (c >= '0' && c <= '9') ? 1 : 0;}
@@ -27,32 +54,39 @@ bool is_space(char c) {return (c == ' ' || c == '\t') ? 1 : 0;}
 void skip_space(char *s) {while (is_space(*s) && *s != 0) s++;}
 
 char* get_name(char *s) {
-  std::string t = "";
-  while (is_alpha(*s)) {t += *s; s++;}
-  printf("\n found IDENT: %s", t.c_str());
-  lexems.push_back(lexem(t, IDENT, actual_line));
+  char buffer[32] = {0};
+  char shift = 0;
+  while (is_alpha(*s)) {
+    buffer[shift++] = *s; // check for owerflow
+    s++;
+  }
+  printf("\n found IDENT: %s", buffer);
+  add(IDENT, &buffer[0], shift);
   skip_space(s);
   return s;
 }
 
 char* get_num(char *s) {
-  std::string t = "";
-  while (is_digit(*s)) {t += *s; s++;}
-  printf("\n found CONST: %s", t.c_str());
-  lexems.push_back(lexem(t, CONST, actual_line));
+  char buffer[32] = {0};
+  char shift = 0;
+  while (is_digit(*s)) {
+    buffer[shift++] = *s; // check for owerflow
+    s++;
+  }
+  printf("\n found CONST: %s", buffer);
+  add(CONST, &buffer[0], shift);
   skip_space(s);
   return s;
 }
 
 void split(char *b) {
-  char lex;
-  
+  char lex, zzz = 0;
   while(*b != '\n' && *b != NULL) {
     lex = *b;
     if (is_space(lex)) {skip_space(b);}
     else if (lex == 'V' && is_decl(b)) {
       printf("\n found DECL");
-      lexems.push_back(lexem("", DECL, actual_line));
+      add(DECL);
       b += 3;
       continue;
     } else if (is_alpha(lex)) {
@@ -61,78 +95,55 @@ void split(char *b) {
     } else if (is_digit(lex)) {
       b = get_num(b);
       continue;
-    } else if (lex == '+') {
-      printf("\n found PLUS: %c", lex);
-      lexems.push_back(lexem("", PLUS, actual_line));
-    } else if (lex == '-') {
-      printf("\n found MINUS: %c", lex);
-      lexems.push_back(lexem("", MINUS, actual_line));
-    } else if (lex == '*') {
-      printf("\n found TIMES: %c", lex);
-      lexems.push_back(lexem("", TIMES, actual_line));
-    } else if (lex == '/') {
-      printf("\n found SLASH: %c", lex);
-      lexems.push_back(lexem("", SLASH, actual_line));
-    } else if (lex == '=') {
-      printf("\n found EQUAL: %c", lex);
-      lexems.push_back(lexem("", EQUAL, actual_line));
-    } else if (lex == '(') {
-      printf("\n found L_PAR: %c", lex);
-      lexems.push_back(lexem("", L_PAR, actual_line));
-    } else if (lex == ')') {
-      printf("\n found R_PAR: %c", lex);
-      lexems.push_back(lexem("", R_PAR, actual_line));
-    } else if (lex == ',') {
-      printf("\n found COMMA: %c", lex);
-      lexems.push_back(lexem("", COMMA, actual_line));
-    } else if (lex == '.') {
-      printf("\n found PERIOD: %c", lex);
-      lexems.push_back(lexem("", PERIOD, actual_line));
-    } else {return;}
-//    if(isOperand(lex)) push(lex); // write lexem to stack
-//    if(isOperator(lex)) push(performOperation(lex, pop(), pop()));
+    } 
+    else if (lex == '+') {printf("\n found PLUS: %c", lex); add(PLUS);}
+    else if (lex == '-') {printf("\n found MINUS: %c", lex); add(MINUS);}
+    else if (lex == '*') {printf("\n found TIMES: %c", lex); add(TIMES);}
+    else if (lex == '/') {printf("\n found SLASH: %c", lex); add(SLASH);}
+    else if (lex == '=') {printf("\n found EQUAL: %c", lex); add(EQUAL);}
+    else if (lex == '(') {printf("\n found L_PAR: %c", lex); add(L_PAR);}
+    else if (lex == ')') {printf("\n found R_PAR: %c", lex); add(R_PAR);}
+    else if (lex == ',') {printf("\n found COMMA: %c", lex); add(COMMA);}
+    else if (lex == '.') {printf("\n found PERIOD: %c", lex); add(PERIOD);}
+    else {return;}
     b++;
   }
-  lexems.push_back(lexem("", NEWLINE, actual_line));
+  add(NEWLINE);
   return;
 }
-
-/*
-program = declaration operation "."
-operation = statement_list
-declaration = "Var" variables
-variables = ident | ident , variables
-statement_list = statement | statement statement_list
-statement = ident "=" expression
-expression = unary sub_expression | sub_expression
-sub_expression = "(" expression ")" | term | sub_expression ("-" | "+" | "*" | "/") sub_expression
-unary = "-" char id_buffer[32] = {0};
-term = ident | constant
-ident = [a-z] ident | [a-z]
-constant = [0-9] constant | [0-9]
-one line can contain only one declaration or one statement
+/*  program = declaration operation "."
+    operation = statement_list
+    declaration = "Var" variables
+    variables = ident | ident , variables
+    statement_list = statement | statement statement_list
+    statement = ident "=" expression
+    expression = unary sub_expression | sub_expression
+    sub_expression = "(" expression ")" | term | sub_expression ("-" | "+" | "*" | "/") sub_expression
+    unary = "-" char id_buffer[32] = {0};
+    term = ident | constant
+    ident = [a-z] ident | [a-z]
+    constant = [0-9] constant | [0-9]
+    one line can contain only one declaration or one statement
 */
-lexem_class symbol;
-int iterator, errors;
-
 void unexpected() {
-  printf("\n expect: unexpected symbol at line %d (%d)", actual_line, symbol);
+  printf("\n expect: unexpected symbol at line %d (%s)", actual_line, types[symbol].c_str());
   errors++;
 }
 
 void next_symbol() {
   if (iterator < lexems.size()) {
-    symbol = lexems[iterator].type_;
-    actual_line = lexems[iterator].line_;
+    symbol = lexems[iterator].type;
+    actual_line = lexems[iterator].line;
     iterator++;
   } else {symbol = UNDEFINED;}
 }
 
-int equal(lexem_class s) {
+int equal(lclass s) {
   if (symbol == s) {next_symbol(); return 1;}
   return 0;
 }
-int expect(lexem_class s) {
+
+int expect(lclass s) {
   if (equal(s)) return 1;
   unexpected();
   return 0;
@@ -194,14 +205,18 @@ void operations() {
 }
 
 void syntax() {
+  errors = iterator = 0;
   next_symbol();
   declaration();
   operations();
   expect(PERIOD);
+  if (!errors) {printf("\n Syntax check passed, no errors");}
+  else {printf("\n Syntax check passed, errors found: %d", errors);}
 }
 
 void postfix() {
-  postfix();
+  // if(isOperand(lex)) push(lex); // write lexem to stack
+  // if(isOperator(lex)) push(performOperation(lex, pop(), pop()));
 }
 
 void main() {
@@ -219,11 +234,11 @@ void main() {
       printf("\n ----- -----");
     }
     fclose(io);
-    iterator = 0;
-    errors = 0;
+
     syntax();
-    if (!errors) {printf("\n Syntax check passed, no errors");}
-    else {printf("\n Syntax check passed, errors found: %d", errors);}
+    postfix();
+
+    deallocate_all();
   }else{/* no file */}
   getch();
 }
