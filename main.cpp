@@ -1,57 +1,68 @@
 #include <conio.h>
 #include <stdio.h>
+#include <stack>
 #include <string>
 #include <vector>
-#include <stack>
 #define CLASSES 15
 
-enum lclass {UNDEF, DECL, IDENT, CONST, NEWL, PLUS, MINUS, TIMES, SLASH, UNARY, EQUAL, COMMA, END, L_PAR, R_PAR};
-std::string types[CLASSES] = {"UNDEF", "DECL", "IDENT", "CONST", "NEWL", "PLUS", "MINUS", "TIMES", "SLASH", "UNARY", "EQUAL", "COMMA", "END", "L_PAR", "R_PAR"};
-unsigned amount[CLASSES] = {0};
+enum lclass { // need better coding for faster and simpler if-sections
+  UNDEF, // 0000
+  DECL,  // 0001
+  IDENT, // 0010
+  CONST, // 0011
+  NEWL,  // 0100
+  PLUS,  // 0101
+  MINUS, // 0110
+  TIMES, // 0111
+  SLASH, // 1000
+  UNARY, // 1001
+  EQUAL, // 1010
+  COMMA, // 1011
+  END,   // 1100
+  L_BR,  // 1101
+  R_BR}; // 1110
+std::string types[CLASSES] = {"UNDEF", "DECL", "IDENT", "CONST", "NEWL", "PLUS", "MINUS", "TIMES", "SLASH", "UNARY", "EQUAL", "COMMA", "END", "L_BR", "R_BR"};
 
-typedef struct lexem_s {
-  lclass type;
-  unsigned line;
-  char *name;
-} lexem_s;
-
-lexem_s temp;
-std::vector<lexem_s> lexems;
-unsigned actual_line;
-
-lclass symbol;
-int errors, iterator;
-
-char* allocate_char(char* name, size_t len) {
-  char *t = new char[len+1];
-  if (t) {
-    for (char i = 0; i < len; i++) {t[i] = name[i];}
-    t[len] = 0;
-    return t;
+char* allocate(char* data, size_t len) {
+  char *ptr = new char[len+1];
+  if (ptr) {
+    for (size_t i = 0; i < len; i++) {ptr[i] = data[i];}
+    ptr[len] = 0;
+    return ptr;
   }
   return 0;
 }
 
+typedef struct token {
+  lclass code;
+  unsigned line;
+  char *data;
+} token;
+
+std::vector<token> tokens;
+std::vector<char*> ds; // declared variables
+
+unsigned actual_line; ////
+
+lclass symbol; ////
+int errors, iterator; ////
+
 void add(lclass type, char* name = 0, size_t len = 0) {
-  amount[type]++;
+  token temp;
   temp.line = actual_line;
-  temp.type = type;
-  temp.name = allocate_char(name, len);
-  lexems.push_back(temp);
-}
-void deallocate_all() {
-  for (unsigned i = 0; i < lexems.size(); i++) {
-    if (temp.name) delete[] temp.name;
-  }
+  temp.code = type;
+  temp.data = 0;
+  if (name) {temp.data = allocate(name, len);}
+  tokens.push_back(temp);
 }
 
 bool is_alpha(char c) {return (c >= 'a' && c <= 'z') ? 1 : 0;}
 bool is_digit(char c) {return (c >= '0' && c <= '9') ? 1 : 0;}
-bool is_decl(char *s) {return (*s == 'V' && *(s + 1) == 'a' && *(s + 2) == 'r') ? 1 : 0;}
+bool is_decl(char *s) {return (*s == 'V' && *(s+1) == 'a' && *(s+2) == 'r') ? 1 : 0;}
 bool is_space(char c) {return (c == ' ' || c == '\t') ? 1 : 0;}
 void skip_space(char *s) {while (is_space(*s) && *s != 0) s++;}
 
-char* get_id(char *s) {
+char* get_id(char *s) { ////
   char buffer[32] = {0};
   char shift = 0;
   while (is_alpha(*s)) {
@@ -63,7 +74,7 @@ char* get_id(char *s) {
   skip_space(s);
   return s;
 }
-char* get_num(char *s) {
+char* get_num(char *s) { ////
   char buffer[32] = {0};
   char shift = 0;
   while (is_digit(*s)) {
@@ -77,31 +88,25 @@ char* get_num(char *s) {
 }
 
 void split(char *b) {
-  char lex, zzz = 0;
   while(*b != '\n' && *b != NULL) {
-    lex = *b;
-    if (is_space(lex)) {skip_space(b);}
-    else if (lex == 'V' && is_decl(b)) {
+    if (is_space(*b)) {skip_space(b);}
+    else if (*b == 'V' && is_decl(b)) {
       printf("\n found DECL");
       add(DECL);
       b += 3;
       continue;
-    } else if (is_alpha(lex)) {
-      b = get_id(b);
-      continue;
-    } else if (is_digit(lex)) {
-      b = get_num(b);
-      continue;
     } 
-    else if (lex == '+') {printf("\n found PLUS: %c", lex); add(PLUS);}
-    else if (lex == '-') {printf("\n found MINUS: %c", lex); add(MINUS);}
-    else if (lex == '*') {printf("\n found TIMES: %c", lex); add(TIMES);}
-    else if (lex == '/') {printf("\n found SLASH: %c", lex); add(SLASH);}
-    else if (lex == '=') {printf("\n found EQUAL: %c", lex); add(EQUAL);}
-    else if (lex == '(') {printf("\n found L_PAR: %c", lex); add(L_PAR);}
-    else if (lex == ')') {printf("\n found R_PAR: %c", lex); add(R_PAR);}
-    else if (lex == ',') {printf("\n found COMMA: %c", lex); add(COMMA);}
-    else if (lex == '.') {printf("\n found END: %c", lex); add(END);}
+    else if (is_alpha(*b)) {b = get_id(b); continue;}
+    else if (is_digit(*b)) {b = get_num(b); continue;}
+    else if (*b == '+') {printf("\n found PLUS: %c", *b); add(PLUS);}
+    else if (*b == '-') {printf("\n found MINUS: %c", *b); add(MINUS);}
+    else if (*b == '*') {printf("\n found TIMES: %c", *b); add(TIMES);}
+    else if (*b == '/') {printf("\n found SLASH: %c", *b); add(SLASH);}
+    else if (*b == '=') {printf("\n found EQUAL: %c", *b); add(EQUAL);}
+    else if (*b == '(') {printf("\n found L_BR: %c", *b); add(L_BR);}
+    else if (*b == ')') {printf("\n found R_BR: %c", *b); add(R_BR);}
+    else if (*b == ',') {printf("\n found COMMA: %c", *b); add(COMMA);}
+    else if (*b == '.') {printf("\n found END: %c", *b); add(END);}
     else {add(UNDEF);}
     b++;
   }
@@ -123,14 +128,14 @@ void split(char *b) {
     one line can contain only one declaration or one statement
 */
 void unexpected() {
-  printf("\n expect: unexpected symbol at line %d (%s)", actual_line, types[symbol].c_str());
+  printf("\n unexpected symbol at line %d (%s)", actual_line, types[symbol].c_str());
   errors++;
 }
 
 void next_symbol() {
-  if (iterator < lexems.size()) {
-    symbol = lexems[iterator].type;
-    actual_line = lexems[iterator].line;
+  if (iterator < tokens.size()) {
+    symbol = tokens[iterator].code;
+    actual_line = tokens[iterator].line;
     iterator++;
   } else {symbol = UNDEF;}
 }
@@ -149,6 +154,7 @@ int expect(lclass s) {
 void variables() {
   if (expect(IDENT)) {
     // add to vartable
+    ds.push_back(tokens[iterator-2].data); ////
     if (equal(COMMA)) {variables();}
   } else {unexpected();}
 }
@@ -157,9 +163,15 @@ void declaration() {
   if (expect(DECL)) {variables();} else {unexpected();}
   if (!expect(NEWL)) {unexpected();}
 }
-void unary() {
-  // check iterator
-  lexems[iterator-1].type = UNARY;
+void unary() {////
+  tokens[iterator-1].code = UNARY;
+}
+
+bool lookup() {
+  for (int i = 0; i < ds.size(); i++) {
+    if (!strcmp(tokens[iterator-2].data, ds[i])) return 1;
+  }
+  return 0;
 }
 
 void expression();
@@ -167,10 +179,14 @@ void factor() {
   if (symbol == MINUS) {unary(); next_symbol();}
   if (equal(IDENT)) {
     // check vartable
+    if (!lookup()) {
+      printf("\n undeclared variable: %s", tokens[iterator-2].data);
+      errors++;
+    }
   } else if (equal(CONST)) {
-  } else if (equal(L_PAR)) {
+  } else if (equal(L_BR)) {
     expression();
-    expect(R_PAR);
+    expect(R_BR);
   } else {
     next_symbol();
     unexpected();
@@ -204,7 +220,7 @@ void operations() {
 
 int opstart;
 
-void syntax() {
+int syntax() {
   errors = iterator = 0;
   next_symbol();
   declaration();
@@ -213,41 +229,41 @@ void syntax() {
   expect(END);
   if (!errors) {printf("\n Syntax check passed, no errors\n");}
   else {printf("\n Syntax check passed, errors found: %d\n", errors);}
+  return !errors;
 }
 
-std::stack<lexem_s> operators;
-std::vector<lexem_s> output;
+std::stack<token> operators; ////
+std::vector<token> output; ////
 
-int is_higher(lclass a, lclass b) {
+int is_higher(lclass a, lclass b) { //// BAD !!
   char res;
   if (a == PLUS || a == MINUS) {res = 1;}
   else if (a == TIMES || a == SLASH) {res = 2;}
-  else if (a == L_PAR) {res = 0;}
+  else if (a == L_BR) {res = 0;}
   else {res = 4;}
   if (b == PLUS || b == MINUS) {res -= 1;}
   else if (b == TIMES || b == SLASH) {res -= 2;}
-  else if (b == L_PAR) {res -= 0;}
+  else if (b == L_BR) {res -= 0;}
   else {res -= 4;}
-
   return (res > 0);
 }
 
-void use_stack() { // no unary
+void use_stack() { ////
   while (symbol != NEWL) {
     if (symbol == CONST || symbol == IDENT) {
-      output.push_back(lexems[iterator-1]);
+      output.push_back(tokens[iterator-1]);
     } else if (symbol == PLUS || symbol == MINUS || symbol == TIMES || symbol == SLASH|| symbol == UNARY) {
       if (!operators.empty()) {
-        while (!operators.empty() && !is_higher(symbol, operators.top().type)) { // less priority
+        while (!operators.empty() && !is_higher(symbol, operators.top().code)) { // less priority
           output.push_back(operators.top()); // !
           operators.pop();
         }
       }
-      operators.push(lexems[iterator-1]);
-    } else if (symbol == L_PAR) {
-      operators.push(lexems[iterator-1]);
-    } else if (symbol == R_PAR) {
-      while (operators.top().type != L_PAR) {
+      operators.push(tokens[iterator-1]);
+    } else if (symbol == L_BR) {
+      operators.push(tokens[iterator-1]);
+    } else if (symbol == R_BR) {
+      while (operators.top().code != L_BR) {
         output.push_back(operators.top());
         operators.pop();
       }
@@ -260,12 +276,12 @@ void use_stack() { // no unary
     operators.pop();
   }
   for (int i = 0; i < output.size(); i++) {
-    if (output[i].type == IDENT || output[i].type == CONST) {printf("%s ", output[i].name);}
-    else if (output[i].type == PLUS) {printf("+ ");}
-    else if (output[i].type == MINUS) {printf("- ");}
-    else if (output[i].type == TIMES) {printf("* ");}
-    else if (output[i].type == SLASH) {printf("/ ");}
-    else if (output[i].type == UNARY) {printf("~ ");}
+    if (output[i].code == IDENT || output[i].code == CONST) {printf("%s ", output[i].data);}
+    else if (output[i].code == PLUS) {printf("+ ");}
+    else if (output[i].code == MINUS) {printf("- ");}
+    else if (output[i].code == TIMES) {printf("* ");}
+    else if (output[i].code == SLASH) {printf("/ ");}
+    else if (output[i].code == UNARY) {printf("~ ");}
   }
   output.clear();
 }
@@ -274,12 +290,12 @@ void postfix() {
   iterator = opstart;
   next_symbol();
   do {    
-    printf("\n %s = ", lexems[iterator-1].name);
-    expect(IDENT);
-    expect(EQUAL);
+    printf("\n %s = ", tokens[iterator-1].data);
+    next_symbol(); // expect(IDENT);
+    next_symbol(); // expect(EQUAL);
     use_stack();
     next_symbol();
-  } while(symbol != NEWL && symbol != COMMA);
+  } while(symbol != NEWL && symbol != END && symbol != UNDEF);
 }
 
 void main() {
@@ -298,13 +314,10 @@ void main() {
     }
     fclose(io);
     
-    for (int i = 0; i < CLASSES; i++) {printf("\n %s \t %d", types[i].c_str(), amount[i]);}
-    printf("\n");
-    syntax();
-    postfix();
-
-    //deallocate_all(); // BIG problem here
-  }else{// no file 
+    if (syntax()) postfix();
+    printf("\n\n DONE");
+  } else {
+    printf("\n error: can't open input file");
   }
   getch();
 }
