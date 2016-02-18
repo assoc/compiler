@@ -5,24 +5,8 @@
 #include <vector>
 #define CLASSES 15
 
-enum lclass {
-  UNDEF,        // 0000
-  EQUAL,        // 0001
-  DECL = 0x2,   // 0010
-  COMMA,        // 0011
-  IDENT = 0x4,  // 0100
-  CONST,        // 0101  
-  PLUS = 0x8,   // 1000
-  MINUS,        // 1001
-  TIMES = 0x10, //   01 0000
-  SLASH,        //   01 0001
-  L_BR = 0x20,  //   10 0000
-  R_BR,         //   10 0001
-  NEWL = 0x40,  //  100 0000
-  END,          //  100 0001
-  UNARY = 0x80  // 1000 0000
-};
-std::string types[CLASSES] = {"UNDEF", "DECL", "IDENT", "CONST", "NEWL", "PLUS", "MINUS", "TIMES", "SLASH", "UNARY", "EQUAL", "COMMA", "END", "L_BR", "R_BR"};
+enum lclass {UNDEF, EQUAL, DECL, COMMA, IDENT, CONST, PLUS, MINUS, TIMES, SLASH, L_BR, R_BR, NEWL, END, UNARY};
+char types[CLASSES][6] = {"UNDEF", "EQUAL", "DECL\0", "COMMA", "IDENT", "CONST", "PLUS\0", "MINUS", "TIMES", "SLASH", "L_BR\0", "R_BR\0", "NEWL\0", "END\0\0", "UNARY"};
 
 char* allocate(char* data, size_t len) {
   char *ptr = new char[len+1];
@@ -53,7 +37,7 @@ void add(lclass type, char* name = 0, size_t len = 0) {
   temp.line = actual_line;
   temp.code = type;
   temp.data = 0;
-  if (name) {temp.data = allocate(name, len);}
+  if (type == IDENT || type == CONST) {temp.data = allocate(name, len);}
   tokens.push_back(temp);
 }
 
@@ -99,7 +83,7 @@ void split(char *b) {
     } 
     else if (is_alpha(*b)) {b = get_id(b); continue;}
     else if (is_digit(*b)) {b = get_num(b); continue;}
-    else if (*b == '+') {printf("\n found PLUS: %c", *b); add(PLUS);}
+    else if (*b == '+') {add(PLUS);}
     else if (*b == '-') {printf("\n found MINUS: %c", *b); add(MINUS);}
     else if (*b == '*') {printf("\n found TIMES: %c", *b); add(TIMES);}
     else if (*b == '/') {printf("\n found SLASH: %c", *b); add(SLASH);}
@@ -128,8 +112,8 @@ void split(char *b) {
     constant = [0-9] constant | [0-9]
     one line can contain only one declaration or one statement
 */
-void unexpected() {
-  printf("\n unexpected symbol at line %d (%s)", actual_line, types[symbol].c_str());
+void unexpected(lclass s) {
+  printf("\n unexpected symbol at line %d (%s)", actual_line, types[symbol]);
   errors++;
 }
 
@@ -148,7 +132,7 @@ int equal(lclass s) {
 
 int expect(lclass s) {
   if (equal(s)) return 1;
-  unexpected();
+  unexpected(s);
   return 0;
 }
 
@@ -157,12 +141,12 @@ void variables() {
     // add to vartable
     ds.push_back(tokens[iterator-2].data); ////
     if (equal(COMMA)) {variables();}
-  } else {unexpected();}
+  } else {unexpected(IDENT);}
 }
 
 void declaration() {
   if (expect(DECL)) {variables();} else {unexpected();}
-  if (!expect(NEWL)) {unexpected();}
+  if (!expect(NEWL)) {unexpected(NEWL);}
 }
 void unary() {////
   tokens[iterator-1].code = UNARY;
@@ -238,12 +222,12 @@ std::vector<token> output; ////
 
 int is_higher(lclass a, lclass b) { //// BAD !!
   char res;
-  if (a & PLUS) {res = 1;}
-  else if (a & TIMES) {res = 2;}
+  if (a == PLUS || a == MINUS) {res = 1;}
+  else if (a == TIMES || a == SLASH) {res = 2;}
   else if (a == L_BR) {res = 0;}
   else {res = 4;}
-  if (b & 0x8) {res -= 1;}
-  else if (b & 0x10) {res -= 2;}
+  if (b == PLUS || b == MINUS) {res -= 1;}
+  else if (b == TIMES || b == SLASH) {res -= 2;}
   else if (b == L_BR) {res -= 0;}
   else {res -= 4;}
   return (res > 0);
@@ -253,9 +237,9 @@ void assembler();
 
 void use_stack() { ////
   while (symbol != NEWL) {
-    if (symbol & IDENT) {
+    if (symbol == IDENT || symbol == CONST) {
       output.push_back(tokens[iterator-1]);
-    } else if (symbol & PLUS || symbol & TIMES || symbol == UNARY) {
+    } else if (symbol == PLUS || symbol == MINUS || symbol == TIMES || symbol == SLASH || symbol == UNARY) {
       if (!operators.empty()) {
         while (!operators.empty() && !is_higher(symbol, operators.top().code)) { // less priority
           output.push_back(operators.top()); // !
@@ -279,7 +263,7 @@ void use_stack() { ////
     operators.pop();
   }
   for (int i = 0; i < output.size(); i++) { // 2 to 0
-    if (output[i].code & IDENT) {printf("%s ", output[i].data);}
+    if (output[i].code == IDENT || output[i].code == CONST) {printf("%s ", output[i].data);}
     else if (output[i].code == PLUS) {printf("+ ");}
     else if (output[i].code == MINUS) {printf("- ");}
     else if (output[i].code == TIMES) {printf("* ");}
@@ -300,7 +284,7 @@ void postfix() {
     output.push_back(tokens[iterator-1]); next_symbol();
     use_stack();
     next_symbol();
-  } while (!(symbol & NEWL) && symbol != UNDEF);
+  } while (symbol != NEWL && symbol != END && symbol != UNDEF);
 }
 
 void assembler() {
