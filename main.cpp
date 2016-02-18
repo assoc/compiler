@@ -5,22 +5,23 @@
 #include <vector>
 #define CLASSES 15
 
-enum lclass { // need better coding for faster and simpler if-sections
-  UNDEF, // 0000
-  DECL,  // 0001
-  IDENT, // 0010
-  CONST, // 0011
-  NEWL,  // 0100
-  PLUS,  // 0101
-  MINUS, // 0110
-  TIMES, // 0111
-  SLASH, // 1000
-  UNARY, // 1001
-  EQUAL, // 1010
-  COMMA, // 1011
-  END,   // 1100
-  L_BR,  // 1101
-  R_BR}; // 1110
+enum lclass {
+  UNDEF,        // 0000
+  EQUAL,        // 0001
+  DECL = 0x2,   // 0010
+  COMMA,        // 0011
+  IDENT = 0x4,  // 0100
+  CONST,        // 0101  
+  PLUS = 0x8,   // 1000
+  MINUS,        // 1001
+  TIMES = 0x10, //   01 0000
+  SLASH,        //   01 0001
+  L_BR = 0x20,  //   10 0000
+  R_BR,         //   10 0001
+  NEWL = 0x40,  //  100 0000
+  END,          //  100 0001
+  UNARY = 0x80  // 1000 0000
+};
 std::string types[CLASSES] = {"UNDEF", "DECL", "IDENT", "CONST", "NEWL", "PLUS", "MINUS", "TIMES", "SLASH", "UNARY", "EQUAL", "COMMA", "END", "L_BR", "R_BR"};
 
 char* allocate(char* data, size_t len) {
@@ -237,22 +238,24 @@ std::vector<token> output; ////
 
 int is_higher(lclass a, lclass b) { //// BAD !!
   char res;
-  if (a == PLUS || a == MINUS) {res = 1;}
-  else if (a == TIMES || a == SLASH) {res = 2;}
+  if (a & PLUS) {res = 1;}
+  else if (a & TIMES) {res = 2;}
   else if (a == L_BR) {res = 0;}
   else {res = 4;}
-  if (b == PLUS || b == MINUS) {res -= 1;}
-  else if (b == TIMES || b == SLASH) {res -= 2;}
+  if (b & 0x8) {res -= 1;}
+  else if (b & 0x10) {res -= 2;}
   else if (b == L_BR) {res -= 0;}
   else {res -= 4;}
   return (res > 0);
 }
 
+void assembler();
+
 void use_stack() { ////
   while (symbol != NEWL) {
-    if (symbol == CONST || symbol == IDENT) {
+    if (symbol & IDENT) {
       output.push_back(tokens[iterator-1]);
-    } else if (symbol == PLUS || symbol == MINUS || symbol == TIMES || symbol == SLASH|| symbol == UNARY) {
+    } else if (symbol & PLUS || symbol & TIMES || symbol == UNARY) {
       if (!operators.empty()) {
         while (!operators.empty() && !is_higher(symbol, operators.top().code)) { // less priority
           output.push_back(operators.top()); // !
@@ -275,27 +278,50 @@ void use_stack() { ////
     output.push_back(operators.top());
     operators.pop();
   }
-  for (int i = 0; i < output.size(); i++) {
-    if (output[i].code == IDENT || output[i].code == CONST) {printf("%s ", output[i].data);}
+  for (int i = 0; i < output.size(); i++) { // 2 to 0
+    if (output[i].code & IDENT) {printf("%s ", output[i].data);}
     else if (output[i].code == PLUS) {printf("+ ");}
     else if (output[i].code == MINUS) {printf("- ");}
     else if (output[i].code == TIMES) {printf("* ");}
     else if (output[i].code == SLASH) {printf("/ ");}
     else if (output[i].code == UNARY) {printf("~ ");}
+    else if (output[i].code == EQUAL) {printf("= ");}
   }
+  assembler();
   output.clear();
 }
 
 void postfix() {
   iterator = opstart;
   next_symbol();
-  do {    
-    printf("\n %s = ", tokens[iterator-1].data);
-    next_symbol(); // expect(IDENT);
-    next_symbol(); // expect(EQUAL);
+  do {
+    printf("\n");
+    output.push_back(tokens[iterator-1]); next_symbol();
+    output.push_back(tokens[iterator-1]); next_symbol();
     use_stack();
     next_symbol();
-  } while(symbol != NEWL && symbol != END && symbol != UNDEF);
+  } while (!(symbol & NEWL) && symbol != UNDEF);
+}
+
+void assembler() {
+/*  LIT const - push CONST to stack
+    LOAD n - push IDENT 'n' to stack
+    STO n - pop 'n'
+    ADD, MUL - two top elements
+    SUB - top minus second
+    DIV - top divide by second
+    NOT - logical not for top */
+  for (int i = 2; i < output.size(); i++) {
+    if (output[i].code == IDENT) {printf("\n LOAD %s ", output[i].data);}
+    else if (output[i].code == CONST){printf("\n LIT %s ", output[i].data);}
+    else if (output[i].code == PLUS) {printf("\n ADD ");}
+    else if (output[i].code == MINUS) {printf("\n SUB ");} //// FIX HERE
+    else if (output[i].code == TIMES) {printf("\n MUL ");}
+    else if (output[i].code == SLASH) {printf("\n DIV ");} //// FIX HERE
+    else if (output[i].code == UNARY) {printf("\n NOT \n LIT 1 \n ADD");}
+  }
+  printf("\n STO %s \n", output[0].data);
+
 }
 
 void main() {
