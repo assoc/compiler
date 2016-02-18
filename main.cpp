@@ -43,15 +43,34 @@ void add(lclass type, char* name = 0, size_t len = 0) {
 
 bool is_alpha(char c) {return (c >= 'a' && c <= 'z') ? 1 : 0;}
 bool is_digit(char c) {return (c >= '0' && c <= '9') ? 1 : 0;}
-bool is_decl(char *s) {return (*s == 'V' && *(s+1) == 'a' && *(s+2) == 'r') ? 1 : 0;}
 bool is_space(char c) {return (c == ' ' || c == '\t') ? 1 : 0;}
 void skip_space(char *s) {while (is_space(*s) && *s != 0) s++;}
 
+char* get_decl(char *s) {
+  char buffer[32] = {0}, shift = 1;
+  char example[4] = "Var";
+  buffer[0] = 'V'; s++;
+  while (is_alpha(*s) && shift < 32) {
+    buffer[shift++] = *s;
+    s++;
+  }
+  if (strcmp(&example[0], &buffer[0])) {
+	printf("\n found UNDEF: %s", buffer);
+	add(UNDEF, &buffer[0], shift);
+  } else {
+	printf("\n found DECL");
+    add(DECL);
+  }
+
+
+  skip_space(s);
+  return s;
+}
+
 char* get_id(char *s) { ////
-  char buffer[32] = {0};
-  char shift = 0;
-  while (is_alpha(*s)) {
-    buffer[shift++] = *s; // check for owerflow
+  char buffer[32] = {0}, shift = 0;
+  while (is_alpha(*s) && shift < 32) {
+    buffer[shift++] = *s;
     s++;
   }
   printf("\n found IDENT: %s", buffer);
@@ -60,10 +79,9 @@ char* get_id(char *s) { ////
   return s;
 }
 char* get_num(char *s) { ////
-  char buffer[32] = {0};
-  char shift = 0;
-  while (is_digit(*s)) {
-    buffer[shift++] = *s; // check for owerflow
+  char buffer[32] = {0}, shift = 0;
+  while (is_digit(*s) && shift < 32) {
+    buffer[shift++] = *s;
     s++;
   }
   printf("\n found CONST: %s", buffer);
@@ -75,12 +93,7 @@ char* get_num(char *s) { ////
 void split(char *b) {
   while(*b != '\n' && *b != NULL) {
     if (is_space(*b)) {skip_space(b);}
-    else if (*b == 'V' && is_decl(b)) {
-      printf("\n found DECL");
-      add(DECL);
-      b += 3;
-      continue;
-    } 
+    else if (*b == 'V') {b = get_decl(b); continue;} 
     else if (is_alpha(*b)) {b = get_id(b); continue;}
     else if (is_digit(*b)) {b = get_num(b); continue;}
     else if (*b == '+') {add(PLUS);}
@@ -113,7 +126,7 @@ void split(char *b) {
     one line can contain only one declaration or one statement
 */
 void unexpected(lclass s) {
-  printf("\n unexpected symbol at line %d (%s)", actual_line, types[symbol]);
+  printf("\n syntax: unexpected symbol at line %d (%s)", actual_line, types[symbol]);
   errors++;
 }
 
@@ -136,36 +149,36 @@ int expect(lclass s) {
   return 0;
 }
 
+bool lookup(char* d) {
+  for (int i = 0; i < ds.size(); i++) {
+    if (!strcmp(d, ds[i])) return 1;
+  }
+  return 0;
+}
+
 void variables() {
   if (expect(IDENT)) {
-    // add to vartable
-    ds.push_back(tokens[iterator-2].data); ////
+	  if (!lookup(tokens[iterator-2].data)) {ds.push_back(tokens[iterator-2].data);} //// add to vartable
+	  else {errors++; printf("\n syntax: variable redefinition at line %d (%s)", actual_line, tokens[iterator-2].data);}
     if (equal(COMMA)) {variables();}
   } else {unexpected(IDENT);}
 }
 
-void declaration() {
-  if (expect(DECL)) {variables();} else {unexpected();}
+int declaration() {
+  if (expect(DECL)) {variables();}
   if (!expect(NEWL)) {unexpected(NEWL);}
+  return !errors;
 }
 void unary() {////
   tokens[iterator-1].code = UNARY;
-}
-
-bool lookup() {
-  for (int i = 0; i < ds.size(); i++) {
-    if (!strcmp(tokens[iterator-2].data, ds[i])) return 1;
-  }
-  return 0;
 }
 
 void expression();
 void factor() {
   if (symbol == MINUS) {unary(); next_symbol();}
   if (equal(IDENT)) {
-    // check vartable
-    if (!lookup()) {
-      printf("\n undeclared variable: %s", tokens[iterator-2].data);
+    if (!lookup(tokens[iterator-2].data)) { // check vartable
+      printf("\n syntax: undeclared variable: %s", tokens[iterator-2].data);
       errors++;
     }
   } else if (equal(CONST)) {
@@ -174,7 +187,7 @@ void factor() {
     expect(R_BR);
   } else {
     next_symbol();
-    unexpected();
+    unexpected(symbol);
   }
 }
 
@@ -208,12 +221,14 @@ int opstart;
 int syntax() {
   errors = iterator = 0;
   next_symbol();
-  declaration();
+  if (!declaration()) return !errors; //// check UNDEF
   opstart = iterator - 1;
   operations();
   expect(END);
+  expect(NEWL);
+  if (!errors && iterator != tokens.size()) {errors++; printf("\n syntax: expected end at line %d \n", actual_line-1);}
   if (!errors) {printf("\n Syntax check passed, no errors\n");}
-  else {printf("\n Syntax check passed, errors found: %d\n", errors);}
+  else {printf("\n Syntax check complete, errors found: %d\n", errors);}
   return !errors;
 }
 
@@ -288,13 +303,6 @@ void postfix() {
 }
 
 void assembler() {
-/*  LIT const - push CONST to stack
-    LOAD n - push IDENT 'n' to stack
-    STO n - pop 'n'
-    ADD, MUL - two top elements
-    SUB - top minus second
-    DIV - top divide by second
-    NOT - logical not for top */
   for (int i = 2; i < output.size(); i++) {
     if (output[i].code == IDENT) {printf("\n LOAD %s ", output[i].data);}
     else if (output[i].code == CONST){printf("\n LIT %s ", output[i].data);}
@@ -302,18 +310,18 @@ void assembler() {
     else if (output[i].code == MINUS) {printf("\n SUB ");} //// FIX HERE
     else if (output[i].code == TIMES) {printf("\n MUL ");}
     else if (output[i].code == SLASH) {printf("\n DIV ");} //// FIX HERE
-    else if (output[i].code == UNARY) {printf("\n NOT \n LIT 1 \n ADD");}
+    else if (output[i].code == UNARY) {printf("\n NOT \n LIT 1 \n ADD ");}
   }
   printf("\n STO %s \n", output[0].data);
-
 }
-
+void deallocate(){
+  while (!tokens.empty()) {delete[] tokens[tokens.size()-1].data; tokens.pop_back();}
+}
 void main() {
   char buf[256] = "in";
   FILE *io;
-  //printf("Enter filename: ");
+  //printf("\n input: ");
   //gets(buf);
-  //if (strlen(buf) == 0) {return;}
   if (io = fopen(buf, "r")) {
     actual_line = 0;
     while(!feof(io)) {
@@ -325,6 +333,7 @@ void main() {
     fclose(io);
     
     if (syntax()) postfix();
+	deallocate();
     printf("\n\n DONE");
   } else {
     printf("\n error: can't open input file");
