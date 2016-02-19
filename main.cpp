@@ -19,8 +19,8 @@ vector<token> tokens;
 vector<token>::iterator it, ops;
 vector<char*> ds; // declared variables
 unsigned errors;
-stack<token> operators; //// pointers??
-vector<token> output; //// pointers??
+stack<token*> operators;
+vector<token*> output;
 
 char* allocate(char* data, size_t len) {
   char *ptr = new char[len+1];
@@ -199,7 +199,7 @@ int syntax() {
   return !errors;
 }
 
-int is_higher(lclass a, lclass b) { //// BAD
+int is_higher(lclass a, lclass b) { //// bad until done with masks
   char res;
   if (a == PLUS || a == MINUS) {res = 1;}
   else if (a == TIMES || a == SLASH) {res = 2;}
@@ -217,19 +217,19 @@ void assembler();
 void use_stack() { ////
   while (it->code != NEWL && it->code != END) {
     if (it->code == IDENT || it->code == CONST) {
-      output.push_back(*it);
+      output.push_back(&(*it));
     } else if (it->code == PLUS || it->code == MINUS || it->code == TIMES || it->code == SLASH || it->code == UNARY) {
       if (!operators.empty()) {
-        while (!operators.empty() && !is_higher(it->code, operators.top().code)) { // less priority
+        while (!operators.empty() && !is_higher(it->code, operators.top()->code)) { // less priority
           output.push_back(operators.top()); // !
           operators.pop();
         }
       }
-      operators.push(*it);
+      operators.push(&(*it));
     } else if (it->code == L_BR) {
-      operators.push(*it);
+      operators.push(&(*it));
     } else if (it->code == R_BR) {
-      while (operators.top().code != L_BR) {
+      while (operators.top()->code != L_BR) {
         output.push_back(operators.top());
         operators.pop();
       }
@@ -241,14 +241,14 @@ void use_stack() { ////
     output.push_back(operators.top());
     operators.pop();
   }
-  for (vector<token>::iterator i = output.begin(); i != output.end(); ++i) {
-    if (i->code == IDENT || i->code == CONST) {printf("%s ", i->data);}
-    else if (i->code == PLUS) {printf("+ ");}
-    else if (i->code == MINUS) {printf("- ");}
-    else if (i->code == TIMES) {printf("* ");}
-    else if (i->code == SLASH) {printf("/ ");}
-    else if (i->code == UNARY) {printf("~ ");}
-    else if (i->code == EQUAL) {printf("= ");}
+  for (vector<token*>::iterator i = output.begin(); i != output.end(); ++i) {
+    if ((*i)->code == IDENT || (*i)->code == CONST) {printf("%s ", (*i)->data);}
+    else if ((*i)->code == PLUS) {printf("+ ");}
+    else if ((*i)->code == MINUS) {printf("- ");}
+    else if ((*i)->code == TIMES) {printf("* ");}
+    else if ((*i)->code == SLASH) {printf("/ ");}
+    else if ((*i)->code == UNARY) {printf("~ ");}
+    else if ((*i)->code == EQUAL) {printf("= ");}
   }
   assembler();
   output.clear();
@@ -258,9 +258,9 @@ void postfix() {
   it = ops;
   do {
     printf("\n");
-    output.push_back(*it);
+    output.push_back(&(*it));
     next_symbol();
-    output.push_back(*it);
+    output.push_back(&(*it));
     next_symbol();
     use_stack();
     next_symbol();
@@ -268,16 +268,16 @@ void postfix() {
 }
 
 void assembler() {
-  for (vector<token>::iterator i = output.begin() + 2; i != output.end(); ++i) {
-    if (i->code == IDENT) {printf("\n LOAD %s ", i->data);}
-    else if (i->code == CONST){printf("\n LIT %s ", i->data);}
-    else if (i->code == PLUS) {printf("\n ADD ");}
-    else if (i->code == MINUS) {printf("\n SUB ");}
-    else if (i->code == TIMES) {printf("\n MUL ");}
-    else if (i->code == SLASH) {printf("\n DIV ");}
-    else if (i->code == UNARY) {printf("\n NOT \n LIT 1 \n ADD ");}
+  for (vector<token*>::iterator i = output.begin() + 2; i != output.end(); ++i) {
+    if ((*i)->code == IDENT) {printf("\n LOAD %s ", (*i)->data);}
+    else if ((*i)->code == CONST){printf("\n LIT %s ", (*i)->data);}
+    else if ((*i)->code == PLUS) {printf("\n ADD ");}
+    else if ((*i)->code == MINUS) {printf("\n SUB ");}
+    else if ((*i)->code == TIMES) {printf("\n MUL ");}
+    else if ((*i)->code == SLASH) {printf("\n DIV ");}
+    else if ((*i)->code == UNARY) {printf("\n NOT \n LIT 1 \n ADD ");}
   }
-  printf("\n STO %s \n", output[0].data);
+  printf("\n STO %s \n", (*output.begin())->data);
 }
 void deallocate(){
   while (!tokens.empty()) {
@@ -286,7 +286,7 @@ void deallocate(){
   }
 }
 void main() {
-  char buf[256] = "in";
+  char buf[256] = "in.txt";
   FILE *io;
   //printf("\n input: "); gets(buf);
   if (io = fopen(buf, "r")) {
