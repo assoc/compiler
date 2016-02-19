@@ -1,8 +1,0 @@
-    Var v,a ,r,i,ab,   l    ,e, rw, x
-   v   = 10					
-   a = -   v  /2				
-   r = -v+(-a)				
-ix = r-v-v-(v+v+v+(a*5*100))/25		
-ab = r+4/(1*12)*i*i+1			
-l = -ab		/ rw-r-r-x			
-e = v*a*((r*(i/ab)-l)+e).

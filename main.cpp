@@ -35,7 +35,7 @@ char* allocate(char* data, size_t len) {
 
 void add(lclass type, unsigned line, char* name = 0, size_t len = 0) {
   token temp = {type, line, 0};
-  if (type == IDENT || type == CONST) {temp.data = allocate(name, len);}
+  if (type == IDENT || type == CONST || type == UNDEF) {temp.data = allocate(name, len);}
   tokens.push_back(temp);
 }
 
@@ -89,18 +89,19 @@ void lexic(FILE *io) {
     else if (b == ',') {printf("\n <%d> COMMA: %c", line, b); add(COMMA, line);}
     else if (b == '\n') {printf("\n <%d> NEWL", line); add(NEWL, line); line++;}
     else if (b == '.') {printf("\n <%d> END: %c", line, b); add(END, line);}
-    else {add(UNDEF, line);}
+    else {add(UNDEF, line, &b, 1);}
     b = fgetc(io);
   } while(b != EOF);
 }
 
 void unexpected(lclass s) {
-  printf("\n syntax: unexpected symbol at line %d - %s (expected %s)", it->line, types[it->code], types[s]);
+  if (it->code != UNDEF) {printf("\n syntax: unexpected symbol at line %d - %s (expected %s)", it->line, types[it->code], types[s]);}
+  else {printf("\n syntax: unexpected symbol at line %d: '%s'", it->line, it->data);}
   errors++;
 }
 
 void next_symbol() {
-  if (it != tokens.end()) {it++;} //else {symbol = UNDEF;} //** what about 'out of bounds'?
+  if (it != tokens.end()) it++;
 }
 
 int equal(lclass s) {
@@ -186,7 +187,7 @@ void operations() {
 int syntax() {
   errors = 0;
   it = tokens.begin();
-  if (!declaration()) return !errors; //** not necessary??
+  declaration();
   ops = it;
   operations();
   expect(END);
