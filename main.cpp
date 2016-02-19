@@ -91,7 +91,7 @@ void lexic(FILE *io) {
     else if (b == '.') {printf("\n <%d> END: %c", line, b); add(END, line);}
     else {add(UNDEF, line, &b, 1);}
     b = fgetc(io);
-  } while(b != EOF);
+  } while (b != EOF);
 }
 
 void unexpected(lclass s) {
@@ -140,7 +140,7 @@ int declaration() {
 
 void expression();
 
-void factor() {
+void term() {
   if (it->code == MINUS) {it->code = UNARY; next_symbol();}
   if (equal(IDENT)) {
     it--;
@@ -159,29 +159,23 @@ void factor() {
   }
 }
 
-void term() {
-  factor();
-  while (it->code == TIMES || it->code == SLASH) {
-    next_symbol();
-    factor();
-  }
-}
-
 void expression() {
   if (it->code == MINUS) {it->code = UNARY; next_symbol();}
   term();
-  while (it->code == PLUS || it->code == MINUS) {
+  while (it->code == PLUS || it->code == MINUS || it->code == TIMES || it->code == SLASH) {
     next_symbol();
     term();
   }
 }
 
-void operations() {
-  do {
-    expect(IDENT);
-    expect(EQUAL);
-    expression();
-  } while(equal(NEWL));
+void assign() {
+  expect(IDENT);
+  expect(EQUAL);
+  expression();
+}
+
+void calculation() {
+  do {assign();} while (equal(NEWL));
 }
 
 int syntax() {
@@ -189,7 +183,7 @@ int syntax() {
   it = tokens.begin();
   declaration();
   ops = it;
-  operations();
+  calculation();
   expect(END);
   if (!errors && it != tokens.end() && it->code != UNDEF) { //** dangerous: out of bounds
     errors++;
