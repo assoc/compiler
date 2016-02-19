@@ -95,7 +95,7 @@ void lexic(FILE *io) {
 }
 
 void unexpected(lclass s) {
-  if (it->code != UNDEF) {printf("\n syntax: unexpected symbol at line %d - %s (expected %s)", it->line, types[it->code], types[s]);}
+  if (it->code != UNDEF) {printf("\n syntax: unexpected symbol at line %d: %s (expected %s)", it->line, types[it->code], types[s]);}
   else {printf("\n syntax: unexpected symbol at line %d: '%s'", it->line, it->data);}
   errors++;
 }
@@ -125,16 +125,16 @@ bool lookup(char* d) {
 void variables() {
   if (expect(IDENT)) {
     it--;
-    if (!lookup(it->data)) {ds.push_back(it->data);} //// add to vartable
+    if (!lookup(it->data)) {ds.push_back(it->data);}
     else {errors++; printf("\n syntax: variable redefinition at line %d (%s)", it->line, it->data);}
     it++;
     if (equal(COMMA)) {variables();}
-  } // removed doubled unexpected message
+  }
 }
 
-int declaration() {
+bool declaration() {
   if (expect(DECL)) {variables();}
-  if (!expect(NEWL)) {unexpected(NEWL);}
+  expect(NEWL);
   return !errors;
 }
 
@@ -155,7 +155,7 @@ void term() {
     expect(R_BR);
   } else {
     next_symbol();
-    unexpected(it->code);
+    unexpected(IDENT); // not exactly: can be CONST, L_BR or R_BR
   }
 }
 
@@ -178,7 +178,7 @@ void calculation() {
   do {assign();} while (equal(NEWL));
 }
 
-int syntax() {
+bool syntax() {
   errors = 0;
   it = tokens.begin();
   declaration();
@@ -194,7 +194,7 @@ int syntax() {
   return !errors;
 }
 
-int is_higher(lclass a, lclass b) { //// bad until done with masks
+bool is_higher(lclass a, lclass b) { //// bad until done with masks
   char res;
   if (a == PLUS || a == MINUS) {res = 1;}
   else if (a == TIMES || a == SLASH) {res = 2;}
@@ -274,12 +274,12 @@ void assembler() {
   }
   printf("\n STO %s \n", (*output.begin())->data);
 }
+
 void deallocate(){
-  while (!tokens.empty()) {
-    delete[] tokens[tokens.size()-1].data;
-    tokens.pop_back();
-  }
+  for (it = tokens.begin(); it != tokens.end(); ++it) {delete[] it->data;}
+  tokens.clear();
 }
+
 void main() {
   char buf[256] = "in.txt";
   FILE *io;
