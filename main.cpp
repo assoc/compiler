@@ -16,10 +16,10 @@ typedef struct token {
 
 std::vector<token> tokens;
 std::vector<char*> ds; // declared variables
-unsigned actual_line; ////
-lclass symbol; ////
-int errors, iterator; ////
-int opstart;
+unsigned cur_line; ////
+lclass symbol;
+int errors;
+size_t iterator, opstart; ////
 std::stack<token> operators; ////
 std::vector<token> output; ////
 
@@ -34,7 +34,7 @@ char* allocate(char* data, size_t len) {
 }
 
 void add(lclass type, char* name = 0, size_t len = 0) {
-  token temp = {type, actual_line, 0}; //// danger?
+  token temp = {type, cur_line, 0}; //// danger?
   if (type == IDENT || type == CONST) {temp.data = allocate(name, len);}
   tokens.push_back(temp);
 }
@@ -46,7 +46,7 @@ void skip_space(char *s) {while (is_space(*s) && *s != 0) s++;}
 
 void lexic(FILE *io) {
   char b = fgetc(io);
-  actual_line = 0;
+  cur_line = 0;
   do {
     if (is_space(b)) {b = fgetc(io); continue;}
     else if (b == 'V') {
@@ -55,10 +55,10 @@ void lexic(FILE *io) {
       buffer[0] = 'V';
       while (is_alpha(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
       if (strcmp(&example[0], &buffer[0])) {
-        printf("\n found UNDEF: %s", buffer);
+        printf("\n <%d> UNDEF: %s", cur_line, buffer);
         add(UNDEF, &buffer[0], shift);
       } else {
-	      printf("\n found DECL");
+	      printf("\n <%d> DECL", cur_line);
         add(DECL);
       }
       continue;
@@ -67,7 +67,7 @@ void lexic(FILE *io) {
       char buffer[32] = {0}, shift = 1;
       buffer[0] = b;
       while (is_alpha(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
-      printf("\n found IDENT: %s", buffer);
+      printf("\n <%d> IDENT: %s", cur_line, buffer);
       add(IDENT, &buffer[0], shift);
       continue;
     }
@@ -75,34 +75,34 @@ void lexic(FILE *io) {
       char buffer[32] = {0}, shift = 1;
       buffer[0] = b;
       while (is_digit(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
-      printf("\n found CONST: %s", buffer);
+      printf("\n <%d> CONST: %s", cur_line, buffer);
       add(CONST, &buffer[0], shift);
       continue;
     }
-    else if (b == '+') {printf("\n found PLUS: %c", b); add(PLUS);}
-    else if (b == '-') {printf("\n found MINUS: %c", b); add(MINUS);}
-    else if (b == '*') {printf("\n found TIMES: %c", b); add(TIMES);}
-    else if (b == '/') {printf("\n found SLASH: %c", b); add(SLASH);}
-    else if (b == '=') {printf("\n found EQUAL: %c", b); add(EQUAL);}
-    else if (b == '(') {printf("\n found L_BR: %c", b); add(L_BR);}
-    else if (b == ')') {printf("\n found R_BR: %c", b); add(R_BR);}
-    else if (b == ',') {printf("\n found COMMA: %c", b); add(COMMA);}
-    else if (b == '\n') {printf("\n found NEWL"); add(NEWL); actual_line++;}
-    else if (b == '.') {printf("\n found END: %c", b); add(END);}
+    else if (b == '+') {printf("\n <%d> PLUS: %c", cur_line, b); add(PLUS);}
+    else if (b == '-') {printf("\n <%d> MINUS: %c", cur_line, b); add(MINUS);}
+    else if (b == '*') {printf("\n <%d> TIMES: %c", cur_line, b); add(TIMES);}
+    else if (b == '/') {printf("\n <%d> SLASH: %c", cur_line, b); add(SLASH);}
+    else if (b == '=') {printf("\n <%d> EQUAL: %c", cur_line, b); add(EQUAL);}
+    else if (b == '(') {printf("\n <%d> L_BR: %c", cur_line, b); add(L_BR);}
+    else if (b == ')') {printf("\n <%d> R_BR: %c", cur_line, b); add(R_BR);}
+    else if (b == ',') {printf("\n <%d> COMMA: %c", cur_line, b); add(COMMA);}
+    else if (b == '\n') {printf("\n <%d> NEWL", cur_line); add(NEWL); cur_line++;}
+    else if (b == '.') {printf("\n <%d> END: %c", cur_line, b); add(END);}
     else {add(UNDEF);}
     b = fgetc(io);
   } while(b != EOF);
 }
 
 void unexpected(lclass s) {
-  printf("\n syntax: unexpected symbol at line %d (%s)", actual_line, types[symbol]);
+  printf("\n syntax: unexpected symbol at line %d (%s)", cur_line, types[symbol]);
   errors++;
 }
 
 void next_symbol() {
   if (iterator < tokens.size()) {
     symbol = tokens[iterator].code;
-    actual_line = tokens[iterator].line;
+    cur_line = tokens[iterator].line;
     iterator++;
   } else {symbol = UNDEF;}
 }
@@ -119,7 +119,7 @@ int expect(lclass s) {
 }
 
 bool lookup(char* d) {
-  for (int i = 0; i < ds.size(); i++) {
+  for (size_t i = 0; i < ds.size(); i++) {
     if (!strcmp(d, ds[i])) return 1;
   }
   return 0;
@@ -128,7 +128,7 @@ bool lookup(char* d) {
 void variables() {
   if (expect(IDENT)) {
 	  if (!lookup(tokens[iterator-2].data)) {ds.push_back(tokens[iterator-2].data);} //// add to vartable
-	  else {errors++; printf("\n syntax: variable redefinition at line %d (%s)", actual_line, tokens[iterator-2].data);}
+	  else {errors++; printf("\n syntax: variable redefinition at line %d (%s)", cur_line, tokens[iterator-2].data);}
     if (equal(COMMA)) {variables();}
   } else {unexpected(IDENT);}
 }
@@ -192,10 +192,9 @@ int syntax() {
   opstart = iterator - 1;
   operations();
   expect(END);
-  //expect(NEWL);
-  if (!errors && iterator != tokens.size()) {
+  if (!errors && symbol != UNDEF && iterator != tokens.size()) {
     errors++;
-    printf("\n syntax: expected end at line %d \n", actual_line-1);
+    printf("\n syntax: expected end at line %d \n", cur_line-1);
   }
   if (!errors) {printf("\n Syntax check passed, no errors\n");}
   else {printf("\n Syntax check complete, errors found: %d\n", errors);}
@@ -244,7 +243,7 @@ void use_stack() { ////
     output.push_back(operators.top());
     operators.pop();
   }
-  for (int i = 0; i < output.size(); i++) { // 2 to 0
+  for (size_t i = 0; i < output.size(); i++) { // 2 to 0
     if (output[i].code == IDENT || output[i].code == CONST) {printf("%s ", output[i].data);}
     else if (output[i].code == PLUS) {printf("+ ");}
     else if (output[i].code == MINUS) {printf("- ");}
@@ -272,7 +271,7 @@ void postfix() {
 }
 
 void assembler() {
-  for (int i = 2; i < output.size(); i++) {
+  for (size_t i = 2; i < output.size(); i++) {
     if (output[i].code == IDENT) {printf("\n LOAD %s ", output[i].data);}
     else if (output[i].code == CONST){printf("\n LIT %s ", output[i].data);}
     else if (output[i].code == PLUS) {printf("\n ADD ");}
@@ -296,7 +295,6 @@ void main() {
   if (io = fopen(buf, "r")) {
     lexic(io);
     fclose(io);
-    
     if (syntax()) postfix();
     deallocate();
     printf("\n\n DONE");
