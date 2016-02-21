@@ -45,16 +45,17 @@ bool is_space(char c) {return (c == ' ' || c == '\t') ? 1 : 0;}
 void skip_space(char *s) {while (is_space(*s) && *s != 0) s++;}
 
 void lexic(FILE *io) {
-  char b = fgetc(io);
+  char b = fgetc(io), buffer[32], shift;
+  char ops[4] = "Var";
   unsigned line = 0;
   do {
     if (is_space(b)) {b = fgetc(io); continue;}
     else if (b == 'V') {
-      char buffer[32] = {0}, shift = 1;
-      char example[4] = "Var";
+      memset(&buffer[0], 0, sizeof(buffer));
+      shift = 1;
       buffer[0] = 'V';
       while (is_alpha(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
-      if (strcmp(&example[0], &buffer[0])) {
+      if (strcmp(&ops[0], &buffer[0])) {
         printf("\n <%d> UNDEF: %s", line, buffer);
         add(UNDEF, line, &buffer[0], shift);
       } else {
@@ -64,7 +65,8 @@ void lexic(FILE *io) {
       continue;
     } 
     else if (is_alpha(b)) {
-      char buffer[32] = {0}, shift = 1;
+      memset(&buffer[0], 0, sizeof(buffer));
+      shift = 1;
       buffer[0] = b;
       while (is_alpha(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
       printf("\n <%d> IDENT: %s", line, buffer);
@@ -72,7 +74,8 @@ void lexic(FILE *io) {
       continue;
     }
     else if (is_digit(b)) {
-      char buffer[32] = {0}, shift = 1;
+      memset(&buffer[0], 0, sizeof(buffer));
+      shift = 1;
       buffer[0] = b;
       while (is_digit(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
       printf("\n <%d> CONST: %s", line, buffer);
@@ -138,17 +141,21 @@ bool declaration() {
   return !errors;
 }
 
+void check_declaration() {
+  it--;
+  if (!lookup(it->data)) {
+    printf("\n syntax: undeclared variable: %s", it->data);
+    errors++;
+  }
+  it++;
+}
+
 void expression();
 
 void term() {
   if (it->code == MINUS) {it->code = UNARY; next_symbol();}
   if (equal(IDENT)) {
-    it--;
-    if (!lookup(it->data)) {
-      printf("\n syntax: undeclared variable: %s", it->data);
-      errors++;
-    }
-    it++;
+    check_declaration();
   } else if (equal(CONST)) {
   } else if (equal(L_BR)) {
     expression();
@@ -168,14 +175,12 @@ void expression() {
   }
 }
 
-void assign() {
-  expect(IDENT);
-  expect(EQUAL);
-  expression();
-}
-
 void calculation() {
-  do {assign();} while (equal(NEWL));
+  do {
+    if (expect(IDENT)) check_declaration();
+    expect(EQUAL);
+    expression();
+  } while (equal(NEWL));
 }
 
 bool syntax() {
@@ -253,10 +258,8 @@ void postfix() {
   it = ops;
   do {
     printf("\n");
-    output.push_back(&(*it));
-    next_symbol();
-    output.push_back(&(*it));
-    next_symbol();
+    output.push_back(&(*it)), next_symbol();
+    output.push_back(&(*it)), next_symbol();
     use_stack();
     next_symbol();
   } while (tokens.end() != it && it->code != NEWL && it->code != END && it->code != UNDEF); //** dangerous: out of bounds
