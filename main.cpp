@@ -17,7 +17,7 @@ typedef struct token {
 
 vector<token> tokens;
 vector<token>::iterator it, ops;
-vector<char*> ds; // declared variables
+vector<char*> ds;
 unsigned errors;
 stack<token*> operators;
 vector<token*> output;
@@ -50,36 +50,26 @@ void lexic(FILE *io) {
   unsigned line = 0;
   do {
     if (is_space(b)) {b = fgetc(io); continue;}
-    else if (b == 'V') {
+    else if (is_alpha(b) || is_digit(b) || b == 'V') {
       memset(&buffer[0], 0, sizeof(buffer));
-      shift = 1;
-      buffer[0] = 'V';
-      while (is_alpha(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
-      if (strcmp(&ops[0], &buffer[0])) {
-        printf("\n <%d> UNDEF: %s", line, buffer);
-        add(UNDEF, line, &buffer[0], shift);
+      buffer[0] = b, shift = 1;
+      if (is_alpha(b) || b == 'V') {while (is_alpha(b = fgetc(io)) && shift < 32) buffer[shift++] = b;}
+      else {while (is_digit(b = fgetc(io)) && shift < 32) buffer[shift++] = b;}
+      if (buffer[0] == 'V') {
+        if (strcmp(&ops[0], &buffer[0])) {
+          printf("\n <%d> UNDEF: %s", line, buffer);
+          add(UNDEF, line, &buffer[0], shift);
+        } else {
+          printf("\n <%d> DECL", line);
+          add(DECL, line);
+        }
+      } else if (is_alpha(buffer[0])) {
+        printf("\n <%d> IDENT: %s", line, buffer);
+        add(IDENT, line, &buffer[0], shift);
       } else {
-        printf("\n <%d> DECL", line);
-        add(DECL, line);
+        printf("\n <%d> CONST: %s", line, buffer);
+        add(CONST, line, &buffer[0], shift);
       }
-      continue;
-    } 
-    else if (is_alpha(b)) {
-      memset(&buffer[0], 0, sizeof(buffer));
-      shift = 1;
-      buffer[0] = b;
-      while (is_alpha(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
-      printf("\n <%d> IDENT: %s", line, buffer);
-      add(IDENT, line, &buffer[0], shift);
-      continue;
-    }
-    else if (is_digit(b)) {
-      memset(&buffer[0], 0, sizeof(buffer));
-      shift = 1;
-      buffer[0] = b;
-      while (is_digit(b = fgetc(io)) && shift < 32) {buffer[shift++] = b;}
-      printf("\n <%d> CONST: %s", line, buffer);
-      add(CONST, line, &buffer[0], shift);
       continue;
     }
     else if (b == '+') {printf("\n <%d> PLUS: %c", line, b); add(PLUS, line);}
@@ -103,9 +93,7 @@ void unexpected(lclass s) {
   errors++;
 }
 
-void next_symbol() {
-  if (it != tokens.end()) it++;
-}
+void next_symbol() {if (it != tokens.end()) it++;}
 
 int equal(lclass s) {
   if (it->code == s) {next_symbol(); return 1;}
@@ -118,17 +106,17 @@ int expect(lclass s) {
   return 0;
 }
 
-bool lookup(char* d) {
+int lookup(char* d) {
   for (size_t i = 0; i < ds.size(); i++) {
-    if (!strcmp(d, ds[i])) return 1;
+    if (!strcmp(d, ds[i])) return i;
   }
-  return 0;
+  return -1;
 }
 
 void variables() {
   if (expect(IDENT)) {
     it--;
-    if (!lookup(it->data)) {ds.push_back(it->data);}
+    if (lookup(it->data) == -1) {ds.push_back(it->data);}
     else {errors++; printf("\n syntax: variable redefinition at line %d (%s)", it->line, it->data);}
     it++;
     if (equal(COMMA)) {variables();}
@@ -143,7 +131,7 @@ bool declaration() {
 
 void check_declaration() {
   it--;
-  if (!lookup(it->data)) {
+  if (lookup(it->data) == -1) {
     printf("\n syntax: undeclared variable: %s", it->data);
     errors++;
   }
@@ -151,6 +139,7 @@ void check_declaration() {
 }
 
 void expression();
+void assembler();
 
 void term() {
   if (it->code == MINUS) {it->code = UNARY; next_symbol();}
@@ -190,7 +179,7 @@ bool syntax() {
   ops = it;
   calculation();
   expect(END);
-  if (!errors && it != tokens.end() && it->code != UNDEF) { //** dangerous: out of bounds
+  if (!errors && it != tokens.end() && it->code != UNDEF) {
     errors++;
     printf("\n syntax: expected end at line %d \n", it->line);
   }
@@ -199,20 +188,16 @@ bool syntax() {
   return !errors;
 }
 
-bool is_higher(lclass a, lclass b) { //// bad until done with masks
-  char res;
+bool is_higher(lclass a, lclass b) { //** bad until done with masks
+  char res = 0;
   if (a == PLUS || a == MINUS) {res = 1;}
   else if (a == TIMES || a == SLASH) {res = 2;}
-  else if (a == L_BR) {res = 0;}
-  else {res = 4;}
+  else if (a == UNARY) {res = 4;}
   if (b == PLUS || b == MINUS) {res -= 1;}
   else if (b == TIMES || b == SLASH) {res -= 2;}
-  else if (b == L_BR) {res -= 0;}
-  else {res -= 4;}
+  else if (b == UNARY) {res -= 4;}
   return (res > 0);
 }
-
-void assembler();
 
 void use_stack() { ////
   while (it->code != NEWL && it->code != END) {
@@ -221,7 +206,7 @@ void use_stack() { ////
     } else if (it->code == PLUS || it->code == MINUS || it->code == TIMES || it->code == SLASH || it->code == UNARY) {
       if (!operators.empty()) {
         while (!operators.empty() && !is_higher(it->code, operators.top()->code)) { // less priority
-          output.push_back(operators.top()); // !
+          output.push_back(operators.top());
           operators.pop();
         }
       }
@@ -262,12 +247,12 @@ void postfix() {
     output.push_back(&(*it)), next_symbol();
     use_stack();
     next_symbol();
-  } while (tokens.end() != it && it->code != NEWL && it->code != END && it->code != UNDEF); //** dangerous: out of bounds
+  } while (tokens.end() != it && it->code != NEWL && it->code != END && it->code != UNDEF);
 }
 
 void assembler() {
   for (vector<token*>::iterator i = output.begin() + 2; i != output.end(); ++i) {
-    if ((*i)->code == IDENT) {printf("\n LOAD %s ", (*i)->data);}
+    if ((*i)->code == IDENT) {printf("\n LOAD %d ", lookup((*i)->data));}
     else if ((*i)->code == CONST){printf("\n LIT %s ", (*i)->data);}
     else if ((*i)->code == PLUS) {printf("\n ADD ");}
     else if ((*i)->code == MINUS) {printf("\n SUB ");}
@@ -275,7 +260,7 @@ void assembler() {
     else if ((*i)->code == SLASH) {printf("\n DIV ");}
     else if ((*i)->code == UNARY) {printf("\n NOT \n LIT 1 \n ADD ");}
   }
-  printf("\n STO %s \n", (*output.begin())->data);
+  printf("\n STO %d \n", lookup((*output.begin())->data));
 }
 
 void deallocate(){
