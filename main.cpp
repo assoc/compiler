@@ -48,7 +48,7 @@ void lexic(FILE *io) {
   char b = fgetc(io), buffer[32], shift;
   char ops[4] = "Var";
   unsigned line = 0;
-  do {
+  while (b != EOF) {
     if (is_space(b)) {b = fgetc(io); continue;}
     else if (is_alpha(b) || is_digit(b) || b == 'V') {
       memset(&buffer[0], 0, sizeof(buffer));
@@ -84,12 +84,12 @@ void lexic(FILE *io) {
     else if (b == '.') {printf("\n <%d> END: %c", line, b); add(END, line);}
     else {add(UNDEF, line, &b, 1);}
     b = fgetc(io);
-  } while (b != EOF);
+  };
 }
 
 void unexpected(lclass s) {
   if (it->code != UNDEF) {printf("\n syntax: unexpected symbol at line %d: %s (expected %s)", it->line, types[it->code], types[s]);}
-  else {printf("\n syntax: unexpected symbol at line %d: '%s'", it->line, it->data);}
+  else {printf("\n syntax: unexpected symbol at line %d: '%s' (expected %s)", it->line, it->data, types[s]);}
   errors++;
 }
 
@@ -124,7 +124,7 @@ void variables() {
 }
 
 bool declaration() {
-  if (expect(DECL)) {variables();}
+  if (expect(DECL)) variables();
   expect(NEWL);
   return !errors;
 }
@@ -150,8 +150,8 @@ void term() {
     expression();
     expect(R_BR);
   } else {
-    next_symbol();
     unexpected(IDENT); // not exactly: can be CONST, L_BR or R_BR
+    next_symbol();
   }
 }
 
@@ -174,6 +174,7 @@ void calculation() {
 
 bool syntax() {
   errors = 0;
+  if (tokens.empty()) {printf("\n syntax: no tokens \n"); return 0;}
   it = tokens.begin();
   declaration();
   ops = it;
@@ -188,7 +189,7 @@ bool syntax() {
   return !errors;
 }
 
-bool is_higher(lclass a, lclass b) { //** bad until done with masks
+bool is_higher(lclass a, lclass b) { // bad until done with masks
   char res = 0;
   if (a == PLUS || a == MINUS) {res = 1;}
   else if (a == TIMES || a == SLASH) {res = 2;}
@@ -205,7 +206,7 @@ void use_stack() { ////
       output.push_back(&(*it));
     } else if (it->code == PLUS || it->code == MINUS || it->code == TIMES || it->code == SLASH || it->code == UNARY) {
       if (!operators.empty()) {
-        while (!operators.empty() && !is_higher(it->code, operators.top()->code)) { // less priority
+        while (!operators.empty() && !is_higher(it->code, operators.top()->code)) {
           output.push_back(operators.top());
           operators.pop();
         }
@@ -218,7 +219,7 @@ void use_stack() { ////
         output.push_back(operators.top());
         operators.pop();
       }
-      operators.pop();  //** dangerous: stack underflow
+      operators.pop();  // stack underflow?
     }
     next_symbol();
   }
