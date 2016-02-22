@@ -84,18 +84,21 @@ void lexic(FILE *io, FILE *out) {
     else {
       add(UNDEF, line, &b, 1);
       fprintf(out, "\n <%d> UNDEF: %c", line, b);
-      printf("\n (%d) syntax: unknown character '%c' [0x%x]", line, b, b);
+      printf("\n (%d) lexer: unknown character '%c' [0x%x]", line, b, b);
     }
     b = fgetc(io);
   };
 }
-
+/* (252) : error C2059: syntax error : ')'
+   printf("\n (%d) parser: missing ')' before new line", it->line);*/
 void unexpected(lclass s) {
-  printf("\n (%d) syntax: unexpected symbol: %s (expected %s)", it->line, types[it->code], types[s]);
+  printf("\n (%d) parser: unexpected symbol: %s [expected %s]", it->line, types[it->code], types[s]);
   errors++;
 }
 
-void next_token() {if (it != tokens.end()) it++;}
+void next_token() {if (it != tokens.end()){it++;}}
+
+bool peek(lclass s) {return (it->code == s);}
 
 int equal(lclass s) {
   if (it->code == s) {next_token(); return 1;}
@@ -116,13 +119,12 @@ int lookup(char* d) {
 }
 
 void variables() {
-  if (expect(IDENT)) {
-    it--;
+  if (peek(IDENT)) {
     if (lookup(it->data) == -1) {ds.push_back(it->data);}
-    else {errors++; printf("\n (%d) syntax: '%s': redifinition ", it->line, it->data);}
-    it++;
+    else {errors++; printf("\n (%d) parser: '%s': redifinition ", it->line, it->data);}
+    next_token();
     if (equal(COMMA)) {variables();}
-  }
+  } else {unexpected(IDENT);}
 }
 
 bool declaration() {
@@ -132,12 +134,10 @@ bool declaration() {
 }
 
 void check_declaration() {
-  it--;
   if (lookup(it->data) == -1) {
-    printf("\n (%d) syntax: '%s': identifier not found", it->line, it->data);
+    printf("\n (%d) parser: '%s': identifier not found", it->line, it->data);
     errors++;
   }
-  it++;
 }
 
 void expression();
@@ -145,14 +145,15 @@ void assemble(FILE *out);
 
 void term() {
   if (it->code == MINUS) {it->code = UNARY; next_token();}
-  if (equal(IDENT)) {
+  if (peek(IDENT)) {
     check_declaration();
+    next_token();
   } else if (equal(CONST)) {
   } else if (equal(L_BR)) {
     expression();
     expect(R_BR);
   } else {
-    unexpected(IDENT); // not exactly: can be CONST, L_BR or R_BR
+    unexpected(IDENT);
     next_token();
   }
 }
@@ -168,7 +169,8 @@ void expression() {
 
 void calculation() {
   do {
-    if (expect(IDENT)) check_declaration();
+    if (peek(IDENT)) check_declaration();
+    expect(IDENT);
     expect(EQUAL);
     expression();
   } while (equal(NEWL));
@@ -176,7 +178,8 @@ void calculation() {
 
 bool syntax() {
   errors = 0;
-  if (tokens.empty()) {printf("\n syntax: no tokens \n"); return 0;}
+  // TODO: fix crashes on small broken files
+  if (tokens.empty()) {printf("\n parser: no tokens \n"); return 0;}
   it = tokens.begin();
   declaration();
   ops = it;
@@ -184,9 +187,9 @@ bool syntax() {
   expect(END);
   if (!errors && it != tokens.end() && it->code != UNDEF) {
     errors++;
-    printf("\n (%d) syntax: expected '.' as last symbol \n", it->line);
+    printf("\n (%d) parser: expected '.' as last symbol \n", it->line);
   }
-  if (!errors) {printf("\n [i] syntax: no errors");}
+  if (!errors) {printf("\n [i] parser: no errors");}
   return !errors;
 }
 
@@ -202,7 +205,7 @@ bool is_higher(lclass a, lclass b) {
 }
 
 void yard_error() {
-  printf("\n postfix: brackets missmatch"); errors++;
+  printf("\n (%d) postfix: brackets missmatch", (*output.begin())->line); errors++;
   while (!operators.empty()) {operators.pop();}
   output.clear();
   while (it->code != NEWL && it->code != END) {next_token();}
