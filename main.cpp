@@ -43,10 +43,10 @@ bool is_alpha(char c) {return (c >= 'a' && c <= 'z') ? 1 : 0;}
 bool is_digit(char c) {return (c >= '0' && c <= '9') ? 1 : 0;}
 bool is_space(char c) {return (c == ' ' || c == '\t') ? 1 : 0;}
 
-void lexic(FILE *io) {
+void lexic(FILE *io, FILE *out) {
   char b = fgetc(io), buffer[32], shift;
   char ops[4] = "Var";
-  unsigned line = 0;
+  unsigned line = 1;
   while (b != EOF) {
     if (is_space(b)) {b = fgetc(io); continue;}
     else if (is_alpha(b) || is_digit(b) || b == 'V') {
@@ -56,39 +56,42 @@ void lexic(FILE *io) {
       else {while (is_digit(b = fgetc(io)) && shift < 32) buffer[shift++] = b;}
       if (buffer[0] == 'V') {
         if (strcmp(&ops[0], &buffer[0])) {
-          printf("\n <%d> UNDEF: %s", line, buffer);
+          fprintf(out, "\n <%d> UNDEF: %s", line, buffer);
           add(UNDEF, line, &buffer[0], shift);
         } else {
-          printf("\n <%d> DECL", line);
+          fprintf(out, "\n <%d> DECL", line);
           add(DECL, line);
         }
       } else if (is_alpha(buffer[0])) {
-        printf("\n <%d> IDENT: %s", line, buffer);
+        fprintf(out, "\n <%d> IDENT: %s", line, buffer);
         add(IDENT, line, &buffer[0], shift);
       } else {
-        printf("\n <%d> CONST: %s", line, buffer);
+        fprintf(out, "\n <%d> CONST: %s", line, buffer);
         add(CONST, line, &buffer[0], shift);
       }
       continue;
     }
-    else if (b == '+') {printf("\n <%d> PLUS: %c", line, b); add(PLUS, line);}
-    else if (b == '-') {printf("\n <%d> MINUS: %c", line, b); add(MINUS, line);}
-    else if (b == '*') {printf("\n <%d> TIMES: %c", line, b); add(TIMES, line);}
-    else if (b == '/') {printf("\n <%d> SLASH: %c", line, b); add(SLASH, line);}
-    else if (b == '=') {printf("\n <%d> EQUAL: %c", line, b); add(EQUAL, line);}
-    else if (b == '(') {printf("\n <%d> L_BR: %c", line, b); add(L_BR, line);}
-    else if (b == ')') {printf("\n <%d> R_BR: %c", line, b); add(R_BR, line);}
-    else if (b == ',') {printf("\n <%d> COMMA: %c", line, b); add(COMMA, line);}
-    else if (b == '\n') {printf("\n <%d> NEWL", line); add(NEWL, line); line++;}
-    else if (b == '.') {printf("\n <%d> END: %c", line, b); add(END, line);}
-    else {add(UNDEF, line, &b, 1);}
+    else if (b == '+') {fprintf(out, "\n <%d> PLUS: %c", line, b); add(PLUS, line);}
+    else if (b == '-') {fprintf(out, "\n <%d> MINUS: %c", line, b); add(MINUS, line);}
+    else if (b == '*') {fprintf(out, "\n <%d> TIMES: %c", line, b); add(TIMES, line);}
+    else if (b == '/') {fprintf(out, "\n <%d> SLASH: %c", line, b); add(SLASH, line);}
+    else if (b == '=') {fprintf(out, "\n <%d> EQUAL: %c", line, b); add(EQUAL, line);}
+    else if (b == '(') {fprintf(out, "\n <%d> L_BR: %c", line, b); add(L_BR, line);}
+    else if (b == ')') {fprintf(out, "\n <%d> R_BR: %c", line, b); add(R_BR, line);}
+    else if (b == ',') {fprintf(out, "\n <%d> COMMA: %c", line, b); add(COMMA, line);}
+    else if (b == '\n') {fprintf(out, "\n <%d> NEWL", line); add(NEWL, line); line++;}
+    else if (b == '.') {fprintf(out, "\n <%d> END: %c", line, b); add(END, line);}
+    else {
+      add(UNDEF, line, &b, 1);
+      fprintf(out, "\n <%d> UNDEF: %c", line, b);
+      printf("\n (%d) syntax: unknown character '%c' [0x%x]", line, b, b);
+    }
     b = fgetc(io);
   };
 }
 
 void unexpected(lclass s) {
-  if (it->code != UNDEF) {printf("\n syntax: unexpected symbol at line %d: %s (expected %s)", it->line, types[it->code], types[s]);}
-  else {printf("\n syntax: unexpected symbol at line %d: '%s' (expected %s)", it->line, it->data, types[s]);}
+  printf("\n (%d) syntax: unexpected symbol: %s (expected %s)", it->line, types[it->code], types[s]);
   errors++;
 }
 
@@ -116,7 +119,7 @@ void variables() {
   if (expect(IDENT)) {
     it--;
     if (lookup(it->data) == -1) {ds.push_back(it->data);}
-    else {errors++; printf("\n syntax: variable redefinition at line %d (%s)", it->line, it->data);}
+    else {errors++; printf("\n (%d) syntax: '%s': redifinition ", it->line, it->data);}
     it++;
     if (equal(COMMA)) {variables();}
   }
@@ -131,14 +134,14 @@ bool declaration() {
 void check_declaration() {
   it--;
   if (lookup(it->data) == -1) {
-    printf("\n syntax: undeclared variable: %s", it->data);
+    printf("\n (%d) syntax: '%s': identifier not found", it->line, it->data);
     errors++;
   }
   it++;
 }
 
 void expression();
-void assemble();
+void assemble(FILE *out);
 
 void term() {
   if (it->code == MINUS) {it->code = UNARY; next_token();}
@@ -181,14 +184,13 @@ bool syntax() {
   expect(END);
   if (!errors && it != tokens.end() && it->code != UNDEF) {
     errors++;
-    printf("\n syntax: expected end at line %d \n", it->line);
+    printf("\n (%d) syntax: expected '.' as last symbol \n", it->line);
   }
-  if (!errors) {printf("\n Syntax check passed, no errors\n");}
-  else {printf("\n Syntax check complete, errors found: %d\n", errors);}
+  if (!errors) {printf("\n [i] syntax: no errors");}
   return !errors;
 }
 
-bool is_higher(lclass a, lclass b) { // bad until done with masks
+bool is_higher(lclass a, lclass b) {
   char res = 0;
   if (a == PLUS || a == MINUS) {res = 1;}
   else if (a == TIMES || a == SLASH) {res = 2;}
@@ -249,32 +251,32 @@ void yard() { ////
     else if ((*i)->code == UNARY) {printf("~ ");}
     else if ((*i)->code == EQUAL) {printf("= ");}
   }
-  assemble();
-  output.clear();
 }
 
-void postfix() {
+void postfix(FILE *out) {
   it = ops;
   do {
-    printf("\n");
+    printf("\n ");
     output.push_back(&(*it)), next_token();
     output.push_back(&(*it)), next_token();
     yard();
+    assemble(out);
+    output.clear();
     next_token();
   } while (tokens.end() != it && it->code != NEWL && it->code != END && it->code != UNDEF);
 }
 
-void assemble() {
+void assemble(FILE *out) {
   for (vector<token*>::iterator i = output.begin() + 2; i != output.end(); ++i) {
-    if ((*i)->code == IDENT) {printf("\n LOAD %d ", lookup((*i)->data));}
-    else if ((*i)->code == CONST){printf("\n LIT %s ", (*i)->data);}
-    else if ((*i)->code == PLUS) {printf("\n ADD ");}
-    else if ((*i)->code == MINUS) {printf("\n SUB ");}
-    else if ((*i)->code == TIMES) {printf("\n MUL ");}
-    else if ((*i)->code == SLASH) {printf("\n DIV ");}
-    else if ((*i)->code == UNARY) {printf("\n NOT \n LIT 1 \n ADD ");}
+    if ((*i)->code == IDENT) {fprintf(out, "\n LOAD %d ", lookup((*i)->data));}
+    else if ((*i)->code == CONST){fprintf(out, "\n LIT %s ", (*i)->data);}
+    else if ((*i)->code == PLUS) {fprintf(out, "\n ADD ");}
+    else if ((*i)->code == MINUS) {fprintf(out, "\n SUB ");}
+    else if ((*i)->code == TIMES) {fprintf(out, "\n MUL ");}
+    else if ((*i)->code == SLASH) {fprintf(out, "\n DIV ");}
+    else if ((*i)->code == UNARY) {fprintf(out, "\n NOT \n LIT 1 \n ADD ");}
   }
-  printf("\n STO %d \n", lookup((*output.begin())->data));
+  fprintf(out, "\n STO %d \n", lookup((*output.begin())->data));
 }
 
 void deallocate(){
@@ -283,18 +285,26 @@ void deallocate(){
 }
 
 void main() {
-  char buf[256] = "in.txt";
-  FILE *io;
-  //printf("\n input: "); gets(buf);
-  if (io = fopen(buf, "r")) {
-    lexic(io);
-    fclose(io);
-    if (syntax()) postfix();
-    deallocate();
-    if (!errors) {printf("\n\n Build succeeded");}
-    else {printf("\n\n Threre were build errors");}
-  } else {
-    printf("\n error: can't open input file");
-  }
+  char buf_input[256] = "in.txt";
+  char buf_lexems[256] = "lexems.txt";
+  char buf_codes[256] = "output.txt";
+  FILE *io, *lexems, *codes;
+  //printf("\n input: "); gets(buf_input);
+  if (io = fopen(buf_input, "r")) {
+    if (lexems = fopen(buf_lexems, "w")) {
+      if (codes = fopen(buf_codes, "w")) {
+        lexic(io, lexems);
+        fclose(io), fclose(lexems);
+        if (syntax()) postfix(codes);
+        deallocate();
+        if (!errors) {
+          printf("\n\n Build succeeded");
+        } else {
+          printf("\n [i] compiler: %d error(s)", errors);
+          printf("\n\n Threre were build errors");
+        }
+      } else {printf("\n error: can't open output file");}
+    } else {printf("\n error: can't open lexems file");}
+  } else {printf("\n error: can't open input file");}
   getch();
 }
