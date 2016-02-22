@@ -138,7 +138,7 @@ void check_declaration() {
 }
 
 void expression();
-void assembler();
+void assemble();
 
 void term() {
   if (it->code == MINUS) {it->code = UNARY; next_token();}
@@ -199,6 +199,13 @@ bool is_higher(lclass a, lclass b) { // bad until done with masks
   return (res > 0);
 }
 
+void yard_error() {
+  printf("\n postfix: brackets missmatch"); errors++;
+  while (!operators.empty()) {operators.pop();}
+  output.clear();
+  while (it->code != NEWL && it->code != END) {next_token();}
+}
+
 void yard() { ////
   while (it->code != NEWL && it->code != END) {
     if (it->code == IDENT || it->code == CONST) {
@@ -214,18 +221,24 @@ void yard() { ////
     } else if (it->code == L_BR) {
       operators.push(&(*it));
     } else if (it->code == R_BR) {
-      while (!operators.empty() && operators.top()->code != L_BR) {
-        output.push_back(operators.top());
+      bool found = false;
+      while (!operators.empty() && !found) {
+        if (operators.top()->code != L_BR) {output.push_back(operators.top());}
+        else {found = true;}
         operators.pop();
       }
-      if (!operators.empty()) {operators.pop();}
-      else {printf("\n engine: yard operators stack underflow"); errors++;}
+      if (!found) {yard_error(); return;}
     }
     next_token();
   }
   while (!operators.empty()) {
-    output.push_back(operators.top());
-    operators.pop();
+    if (operators.top()->code != L_BR) {
+      output.push_back(operators.top());
+      operators.pop();
+    } else {
+      yard_error();
+      return;
+    }
   }
   for (vector<token*>::iterator i = output.begin(); i != output.end(); ++i) {
     if ((*i)->code == IDENT || (*i)->code == CONST) {printf("%s ", (*i)->data);}
@@ -236,7 +249,7 @@ void yard() { ////
     else if ((*i)->code == UNARY) {printf("~ ");}
     else if ((*i)->code == EQUAL) {printf("= ");}
   }
-  assembler();
+  assemble();
   output.clear();
 }
 
@@ -251,7 +264,7 @@ void postfix() {
   } while (tokens.end() != it && it->code != NEWL && it->code != END && it->code != UNDEF);
 }
 
-void assembler() {
+void assemble() {
   for (vector<token*>::iterator i = output.begin() + 2; i != output.end(); ++i) {
     if ((*i)->code == IDENT) {printf("\n LOAD %d ", lookup((*i)->data));}
     else if ((*i)->code == CONST){printf("\n LIT %s ", (*i)->data);}
