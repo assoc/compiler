@@ -42,7 +42,6 @@ void add(lclass type, unsigned line, char* name = 0, size_t len = 0) {
 bool is_alpha(char c) {return (c >= 'a' && c <= 'z') ? 1 : 0;}
 bool is_digit(char c) {return (c >= '0' && c <= '9') ? 1 : 0;}
 bool is_space(char c) {return (c == ' ' || c == '\t') ? 1 : 0;}
-void skip_space(char *s) {while (is_space(*s) && *s != 0) s++;}
 
 void lexic(FILE *io) {
   char b = fgetc(io), buffer[32], shift;
@@ -93,10 +92,10 @@ void unexpected(lclass s) {
   errors++;
 }
 
-void next_symbol() {if (it != tokens.end()) it++;}
+void next_token() {if (it != tokens.end()) it++;}
 
 int equal(lclass s) {
-  if (it->code == s) {next_symbol(); return 1;}
+  if (it->code == s) {next_token(); return 1;}
   return 0;
 }
 
@@ -142,7 +141,7 @@ void expression();
 void assembler();
 
 void term() {
-  if (it->code == MINUS) {it->code = UNARY; next_symbol();}
+  if (it->code == MINUS) {it->code = UNARY; next_token();}
   if (equal(IDENT)) {
     check_declaration();
   } else if (equal(CONST)) {
@@ -151,15 +150,15 @@ void term() {
     expect(R_BR);
   } else {
     unexpected(IDENT); // not exactly: can be CONST, L_BR or R_BR
-    next_symbol();
+    next_token();
   }
 }
 
 void expression() {
-  if (it->code == MINUS) {it->code = UNARY; next_symbol();}
+  if (it->code == MINUS) {it->code = UNARY; next_token();}
   term();
   while (it->code == PLUS || it->code == MINUS || it->code == TIMES || it->code == SLASH) {
-    next_symbol();
+    next_token();
     term();
   }
 }
@@ -200,7 +199,7 @@ bool is_higher(lclass a, lclass b) { // bad until done with masks
   return (res > 0);
 }
 
-void use_stack() { ////
+void yard() { ////
   while (it->code != NEWL && it->code != END) {
     if (it->code == IDENT || it->code == CONST) {
       output.push_back(&(*it));
@@ -215,13 +214,14 @@ void use_stack() { ////
     } else if (it->code == L_BR) {
       operators.push(&(*it));
     } else if (it->code == R_BR) {
-      while (operators.top()->code != L_BR) {
+      while (!operators.empty() && operators.top()->code != L_BR) {
         output.push_back(operators.top());
         operators.pop();
       }
-      operators.pop();  // stack underflow?
+      if (!operators.empty()) {operators.pop();}
+      else {printf("\n engine: yard operators stack underflow"); errors++;}
     }
-    next_symbol();
+    next_token();
   }
   while (!operators.empty()) {
     output.push_back(operators.top());
@@ -244,10 +244,10 @@ void postfix() {
   it = ops;
   do {
     printf("\n");
-    output.push_back(&(*it)), next_symbol();
-    output.push_back(&(*it)), next_symbol();
-    use_stack();
-    next_symbol();
+    output.push_back(&(*it)), next_token();
+    output.push_back(&(*it)), next_token();
+    yard();
+    next_token();
   } while (tokens.end() != it && it->code != NEWL && it->code != END && it->code != UNDEF);
 }
 
@@ -278,7 +278,8 @@ void main() {
     fclose(io);
     if (syntax()) postfix();
     deallocate();
-    printf("\n\n DONE");
+    if (!errors) {printf("\n\n Build succeeded");}
+    else {printf("\n\n Threre were build errors");}
   } else {
     printf("\n error: can't open input file");
   }
