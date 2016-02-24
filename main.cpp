@@ -302,7 +302,10 @@ void main() {
       if (codes = fopen(buf_codes, "w")) {
         lexic(io, lexems);
         fclose(io), fclose(lexems);
-        if (parser()) postfix(codes);
+        if (parser()){
+          postfix(codes);
+          fclose(codes);
+        }
         deallocate();
         if (!errors) {
           printf("\n\n Build succeeded");
