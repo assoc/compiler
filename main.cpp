@@ -1,7 +1,6 @@
 #include <conio.h>
 #include <stdio.h>
 #include <stack>
-#include <string>
 #include <vector>
 using namespace std;
 
@@ -19,6 +18,7 @@ vector<token> tokens;
 vector<token>::iterator it, ops;
 vector<char*> ds;
 unsigned errors;
+bool end_reached;
 stack<token*> operators;
 vector<token*> output;
 
@@ -89,14 +89,18 @@ void lexic(FILE *io, FILE *out) {
     b = fgetc(io);
   };
 }
-/* (252) : error C2059: syntax error : ')'
-   printf("\n (%d) parser: missing ')' before new line", it->line);*/
+
 void unexpected(lclass s) {
   printf("\n (%d) parser: unexpected symbol: %s [expected %s]", it->line, types[it->code], types[s]);
   errors++;
 }
 
-void next_token() {if (it != tokens.end()){it++;}}
+void next_token() {
+  if (++it == tokens.end()){
+    it--;
+    end_reached = 1;
+  }
+}
 
 bool peek(lclass s) {return (it->code == s);}
 
@@ -176,16 +180,16 @@ void calculation() {
   } while (equal(NEWL));
 }
 
-bool syntax() {
+bool parser() {
   errors = 0;
-  // TODO: fix crashes on small broken files
-  if (tokens.empty()) {printf("\n parser: no tokens \n"); return 0;}
+  end_reached = 0;
+  if (tokens.empty()) {printf("\n [i] parser: no tokens \n"); return 0;}
   it = tokens.begin();
   declaration();
   ops = it;
   calculation();
   expect(END);
-  if (!errors && it != tokens.end() && it->code != UNDEF) {
+  if (!errors && !end_reached) {
     errors++;
     printf("\n (%d) parser: expected '.' as last symbol \n", it->line);
   }
@@ -211,7 +215,7 @@ void yard_error() {
   while (it->code != NEWL && it->code != END) {next_token();}
 }
 
-void yard() { ////
+void yard() {
   while (it->code != NEWL && it->code != END) {
     if (it->code == IDENT || it->code == CONST) {
       output.push_back(&(*it));
@@ -288,17 +292,17 @@ void deallocate(){
 }
 
 void main() {
-  char buf_input[256] = "in.txt";
+  char buf_input[256];
   char buf_lexems[256] = "lexems.txt";
   char buf_codes[256] = "output.txt";
   FILE *io, *lexems, *codes;
-  //printf("\n input: "); gets(buf_input);
+  printf("\n input: "); gets(buf_input);
   if (io = fopen(buf_input, "r")) {
     if (lexems = fopen(buf_lexems, "w")) {
       if (codes = fopen(buf_codes, "w")) {
         lexic(io, lexems);
         fclose(io), fclose(lexems);
-        if (syntax()) postfix(codes);
+        if (parser()) postfix(codes);
         deallocate();
         if (!errors) {
           printf("\n\n Build succeeded");
