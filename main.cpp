@@ -1,5 +1,6 @@
 #include <stack>
 #include <vector>
+#include <string>
 
 using std::stack;
 using std::vector;
@@ -10,6 +11,7 @@ char types[][6] = {"UNDEF", "COMMA", "NUMB\0", "PLUS\0", "MINUS", "MULT", "DIVID
 typedef struct token {
   lclass code;
   char *data;
+  long long number;
   unsigned line;
 
   bool is_number() { return code == NUMBER; }
@@ -41,7 +43,12 @@ char* allocate(char* data, size_t len) {
 void add(lclass type, unsigned line, char* name = 0, size_t len = 0)
 {
   token temp = {type, 0, line};
-  if (type == NUMBER || type == UNDEF) {temp.data = allocate(name, len);}
+  if (type == NUMBER || type == UNDEF)
+  {
+	  temp.data = allocate(name, len);
+	  temp.number = std::stoi(temp.data);
+  }
+
   tokens.push_back(temp);
 }
 
@@ -211,8 +218,37 @@ if there are no more tokens to read:
 exit.
 */
 
+void apply_operation()
+{
+	token* operation = operators.top();
+	if (operation->is_binary_operator())
+	{
+		if (output.size() < 2)
+			__debugbreak();
 
-stack<lclass> operations;
+		token* op2 = output.back();
+		output.pop_back();
+		token* op1 = output.back();
+		output.pop_back();
+
+		switch (operation->code)
+		{
+		case PLUS:		op1->number += op2->number;	break;
+		case MINUS:		op1->number -= op2->number;	break;
+		case MULTIPLY:	op1->number *= op2->number;	break;
+		case DIVIDE:	op1->number /= op2->number;	break; // TODO: /0
+		case POWER:		op1->number = pow(op1->number, op2->number); break;
+		}
+
+		output.push_back(op1);
+	}
+	else
+	{
+		if (output.size() < 1)
+			__debugbreak();
+		output.back()->number = -output.back()->number;
+	}
+}
 
 void shunting_yard()
 {
@@ -226,7 +262,7 @@ void shunting_yard()
 		{
 			while (!operators.empty() && !is_higher(it->code, operators.top()->code) && it->is_left_operator())
 			{
-				output.push_back(operators.top());
+				apply_operation(); // output.push_back(operators.top());
 				operators.pop();
 			}
 		}
@@ -235,20 +271,32 @@ void shunting_yard()
 	else if (it->code == L_BR) {
       operators.push(&(*it));
     } else if (it->code == R_BR) {
-      bool found = false;
-      while (!operators.empty() && !found) {
-        if (operators.top()->code != L_BR) {output.push_back(operators.top());}
-        else {found = true;}
+      bool bracket_pair_found = false;
+	  while (!operators.empty() && !bracket_pair_found)
+	  {
+        if (operators.top()->code != L_BR)
+		{
+			apply_operation();
+		}
+        else
+		{
+			bracket_pair_found = true;
+		}
         operators.pop();
       }
-      if (!found) {shunting_yard_error(); return;}
+	  if (!bracket_pair_found)
+	  {
+		  shunting_yard_error();
+		  return;
+	  }
     }
     next_token();
   }
 
-  while (!operators.empty()) {
+  while (!operators.empty())
+  {
     if (operators.top()->code != L_BR) {
-      output.push_back(operators.top());
+		apply_operation();
       operators.pop();
     } else {
       shunting_yard_error();
@@ -257,8 +305,9 @@ void shunting_yard()
   }
 
   // Output as string
-  for (auto i = output.begin(); i != output.end(); ++i) {
-    if ((*i)->code == NUMBER) {printf("%s ", (*i)->data);}
+  for (auto i = output.begin(); i != output.end(); ++i)
+  {
+    if ((*i)->code == NUMBER) {printf("%s (%d)", (*i)->data, (*i)->number);}
     else if ((*i)->code == PLUS) {printf("+ ");}
     else if ((*i)->code == MINUS) {printf("- ");}
     else if ((*i)->code == MULTIPLY) {printf("* ");}
@@ -272,10 +321,7 @@ void postfix(FILE *out) {
   it = ops;
   do {
     printf("\n ");
- //   output.push_back(&(*it)), next_token();
- //   output.push_back(&(*it)), next_token();
     shunting_yard();
-    //assemble(out);
     output.clear();
     next_token();
   } while (tokens.end() != it && it->code != NEWL && /*it->code != END &&*/ it->code != UNDEF);
