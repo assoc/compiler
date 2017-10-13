@@ -10,7 +10,6 @@ char types[][6] = {"UNDEF", "COMMA", "NUMB\0", "PLUS\0", "MINUS", "MULT", "DIVID
 
 typedef struct token {
   lclass code;
-  char *data;
   long long number;
   unsigned line;
 
@@ -22,32 +21,19 @@ typedef struct token {
   bool is_operator() { return is_binary_operator() || is_unary_operator(); }
 } token;
 
-vector<token> tokens;
-vector<token>::iterator it, ops;
-unsigned errors;
-bool end_reached;
-stack<token*> operators;
-vector<token*> output;
+vector<token>			tokens;
+vector<token>::iterator tokens_it;
 
-char* allocate(char* data, size_t len) {
-  char *ptr = new char[len+1];
-  if (ptr) {
-    for (size_t i = 0; i < len; i++) {ptr[i] = data[i];}
-    ptr[len] = 0;
-    return ptr;
-  }
-  printf("\n engine: can't allocate memory");
-  return 0;
-}
+unsigned				errors;
+
+stack<token*>			operators;
+vector<token*>			output;
 
 void add(lclass type, unsigned line, char* name = 0, size_t len = 0)
 {
-  token temp = {type, 0, line};
-  if (type == NUMBER || type == UNDEF)
-  {
-	  temp.data = allocate(name, len);
-	  temp.number = std::stoi(temp.data);
-  }
+  token temp = {type, 0, 0};
+  if (type == NUMBER)
+	  temp.number = std::stoi(name);
 
   tokens.push_back(temp);
 }
@@ -56,62 +42,79 @@ bool is_alpha(char c) {return (c >= 'a' && c <= 'z') ? 1 : 0;}
 bool is_digit(char c) {return (c >= '0' && c <= '9') ? 1 : 0;}
 bool is_space(char c) {return (c == ' ' || c == '\t') ? 1 : 0;}
 
-void lexic(FILE *io, FILE *out) {
-  char b = fgetc(io), buffer[32], shift;
-  unsigned line = 1;
-  while (b != EOF) {
-    if (is_space(b)) {b = fgetc(io); continue;}
-    else if (is_digit(b)) {
-      memset(&buffer[0], 0, sizeof(buffer));
-      buffer[0] = b, shift = 1;
+char next_char(char** in)
+{
+	if (in == 0 || *in == 0)
+		return 0;
 
-      while (is_digit(b = fgetc(io)) && shift < 32)
-		  buffer[shift++] = b;
-      
-	  fprintf(out, "\n <%d> CONST: %s", line, buffer);
-	  add(NUMBER, line, &buffer[0], shift);
+	char c = (**in);
+	(*in)++;
 
-      continue;
-    }
-    else if (b == '+') {fprintf(out, "\n <%d> PLUS: %c", line, b); add(PLUS, line);}
-    else if (b == '-') {fprintf(out, "\n <%d> MINUS: %c", line, b); add(MINUS, line);}
-    else if (b == '*') {fprintf(out, "\n <%d> TIMES: %c", line, b); add(MULTIPLY, line);}
-    else if (b == '/') {fprintf(out, "\n <%d> SLASH: %c", line, b); add(DIVIDE, line);}
-	else if (b == '^') {fprintf(out, "\n <%d> POWER: %c", line, b); add(POWER, line);}
-    else if (b == '(') {fprintf(out, "\n <%d> L_BR: %c", line, b); add(L_BR, line);}
-    else if (b == ')') {fprintf(out, "\n <%d> R_BR: %c", line, b); add(R_BR, line);}
-    else if (b == ',') {fprintf(out, "\n <%d> COMMA: %c", line, b); add(COMMA, line);}
-    else if (b == '\n') {fprintf(out, "\n <%d> NEWL", line); add(NEWL, line); line++;}
-    else {
-      add(UNDEF, line, &b, 1);
-      fprintf(out, "\n <%d> UNDEF: %c", line, b);
-      printf("\n (%d) lexer: unknown character '%c' [0x%x]", line, b, b);
-    }
-    b = fgetc(io);
-  };
+	return c;
 }
 
-void unexpected(lclass s) {
-  printf("\n (%d) parser: unexpected symbol: %s [expected %s]", it->line, types[it->code], types[s]);
+void lexic(char* formula) {
+	char b = next_char(&formula), buffer[32], shift;
+	unsigned line = 1;
+	while (b != 0) {
+		if (is_space(b)) { b = next_char(&formula); continue; }
+		else if (is_digit(b)) {
+			memset(&buffer[0], 0, sizeof(buffer));
+			buffer[0] = b, shift = 1;
+
+			while (is_digit(b = next_char(&formula)) && shift < 32)
+				buffer[shift++] = b;
+
+			add(NUMBER, line, &buffer[0], shift);
+
+			continue;
+		}
+		else if (b == '+') { add(PLUS, line); }
+		else if (b == '-') { add(MINUS, line); }
+		else if (b == '*') { add(MULTIPLY, line); }
+		else if (b == '/') { add(DIVIDE, line); }
+		else if (b == '^') { add(POWER, line); }
+		else if (b == '(') { add(L_BR, line); }
+		else if (b == ')') { add(R_BR, line); }
+		else if (b == ',') { add(COMMA, line); }
+		else if (b == '\n') { add(NEWL, line); line++; }
+		else {
+			add(UNDEF, line, &b, 1);
+			printf("\n (%d) lexer: unknown character '%c' [0x%x]", line, b, b);
+		}
+		b = next_char(&formula);
+	};
+}
+
+void unexpected(lclass s)
+{
+  printf("\n (%d) parser: unexpected symbol: %s [expected %s]", tokens_it->line, types[tokens_it->code], types[s]);
   errors++;
 }
 
-void next_token() {
-  if (++it == tokens.end()){
-    it--;
-    end_reached = 1;
-  }
+void next_token()
+{
+	if (tokens_it != tokens.end())
+		++tokens_it;
 }
 
-bool peek(lclass s) {return (it->code == s);}
+bool peek(lclass s) {return (tokens_it->code == s);}
 
-int equal(lclass s) {
-  if (it->code == s) {next_token(); return 1;}
+int equal(lclass s)
+{
+  if (tokens_it->code == s)
+  {
+	  next_token();
+	  return 1;
+  }
   return 0;
 }
 
-int expect(lclass s) {
-  if (equal(s)) return 1;
+int expect(lclass s)
+{
+  if (equal(s))
+	  return 1;
+
   unexpected(s);
   return 0;
 }
@@ -119,7 +122,7 @@ int expect(lclass s) {
 void expression();
 
 void term() {
-  if (it->code == MINUS) {it->code = UNARY; next_token();}
+  if (tokens_it->code == MINUS) {tokens_it->code = UNARY; next_token();}
   if (equal(NUMBER)) {
   } else if (equal(L_BR)) {
     expression();
@@ -131,15 +134,15 @@ void term() {
 }
 
 void expression() {
-  if (it->code == MINUS)
+  if (tokens_it->code == MINUS)
   {
-	  it->code = UNARY;
+	  tokens_it->code = UNARY;
 	  next_token();
   }
 
   term();
 
-  while (it->is_binary_operator())
+  while (tokens_it->is_binary_operator())
   {
     next_token();
     term();
@@ -154,17 +157,11 @@ void calculation() {
 
 bool parser() {
   errors = 0;
-  end_reached = 0;
   if (tokens.empty()) {printf("\n [i] parser: no tokens \n"); return 0;}
-  it = tokens.begin();
-  ops = it;
+  tokens_it = tokens.begin();
   calculation();
   //expect(NEWL);
-  end_reached = true;
-  if (!errors && !end_reached) {
-    errors++;
-    printf("\n (%d) parser: expected '.' as last symbol \n", it->line);
-  }
+
   if (!errors) {printf("\n [i] parser: no errors");}
   return !errors;
 }
@@ -186,11 +183,17 @@ bool is_higher(lclass a, lclass b)
   return (priority > 0);
 }
 
-void shunting_yard_error() {
-  printf("\n (%d) postfix: brackets missmatch", (*output.begin())->line); errors++;
-  while (!operators.empty()) {operators.pop();}
+void shunting_yard_error()
+{
+  printf("\n (%d) postfix: brackets missmatch", (*output.begin())->line);
+  errors++;
+
+  while (!operators.empty())
+	  operators.pop();
+
   output.clear();
-  while (it->code != NEWL /*&& it->code != END*/) {next_token();}
+
+  while (tokens_it->code != NEWL) {next_token();}
 }
 
 /*
@@ -252,25 +255,25 @@ void apply_operation()
 
 void shunting_yard()
 {
-  while (it->code != NEWL /*&& it->code != END*/) {
-    if (it->is_number())
+  while (tokens_it->code != NEWL /*&& it->code != END*/) {
+    if (tokens_it->is_number())
 	{
-      output.push_back(&(*it));
+      output.push_back(&(*tokens_it));
     }
-	else if (it->is_operator()) {
+	else if (tokens_it->is_operator()) {
 		if (!operators.empty())
 		{
-			while (!operators.empty() && !is_higher(it->code, operators.top()->code) && it->is_left_operator())
+			while (!operators.empty() && !is_higher(tokens_it->code, operators.top()->code) && tokens_it->is_left_operator())
 			{
 				apply_operation(); // output.push_back(operators.top());
 				operators.pop();
 			}
 		}
-		operators.push(&(*it));
+		operators.push(&(*tokens_it));
     }
-	else if (it->code == L_BR) {
-      operators.push(&(*it));
-    } else if (it->code == R_BR) {
+	else if (tokens_it->code == L_BR) {
+      operators.push(&(*tokens_it));
+    } else if (tokens_it->code == R_BR) {
       bool bracket_pair_found = false;
 	  while (!operators.empty() && !bracket_pair_found)
 	  {
@@ -307,7 +310,7 @@ void shunting_yard()
   // Output as string
   for (auto i = output.begin(); i != output.end(); ++i)
   {
-    if ((*i)->code == NUMBER) {printf("%s (%d)", (*i)->data, (*i)->number);}
+    if ((*i)->code == NUMBER) {printf("%d", (*i)->number);}
     else if ((*i)->code == PLUS) {printf("+ ");}
     else if ((*i)->code == MINUS) {printf("- ");}
     else if ((*i)->code == MULTIPLY) {printf("* ");}
@@ -317,49 +320,41 @@ void shunting_yard()
   }
 }
 
-void postfix(FILE *out) {
-  it = ops;
-  do {
-    printf("\n ");
-    shunting_yard();
-    output.clear();
-    next_token();
-  } while (tokens.end() != it && it->code != NEWL && /*it->code != END &&*/ it->code != UNDEF);
+void postfix()
+{
+	tokens_it = tokens.begin();
+	do
+	{
+		printf("\n");
+		shunting_yard();
+		output.clear();
+		next_token();
+	} while (tokens.end() != tokens_it && tokens_it->code != NEWL && tokens_it->code != UNDEF);
 }
 
 void deallocate()
 {
-  for (auto i = tokens.begin(); i != tokens.end(); ++i)
-	delete[] i->data;
-
-  tokens.clear();
+	tokens.clear();
 }
 
 int main(int argc, char* argv[])
 {
-  char buf_input[256] = "in.txt";
-  char buf_lexems[256] = "lexems.txt";
-  char buf_codes[256] = "output.txt";
-  FILE *io, *lexems, *codes;
- // printf("\n input: "); gets(buf_input);
-  if (io = fopen(buf_input, "r")) {
-    if (lexems = fopen(buf_lexems, "w")) {
-      if (codes = fopen(buf_codes, "w")) {
-        lexic(io, lexems);
-        fclose(io), fclose(lexems);
-        if (parser()){
-          postfix(codes);
-          fclose(codes);
-        }
-        deallocate();
-        if (!errors) {
-          printf("\n\n Build succeeded");
-        } else {
-          printf("\n [i] compiler: %d error(s)", errors);
-          printf("\n\n Threre were build errors");
-        }
-      } else {printf("\n error: can't open output file");}
-    } else {printf("\n error: can't open lexems file");}
-  } else {printf("\n error: can't open input file");}
-  return 0;
+	char buf_input[] =	"3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3"	"\n"
+						"2 + 2 * 2"						"\n"
+						"100 * ( 2 + 12 ) / 14"			"\n"; // TODO: parser failed when 14 deleted
+
+	lexic(buf_input);
+
+	if (parser())
+		postfix();
+
+	deallocate();
+
+	if (errors)
+	{
+		printf("\n [i] compiler: %d error(s)", errors);
+		printf("\n\n Threre were build errors");
+	}
+	
+	return errors;
 }
