@@ -22,7 +22,7 @@ typedef struct token {
 	{ return code == POWER; }
 	bool is_binary_operator(){ return is_left_operator() || is_right_operator(); }
 	bool is_unary_operator()
-	{ return code == UNARY; }
+	{ return code == MINUS; }
 	bool is_operator()
 	{ return is_binary_operator() || is_unary_operator(); }
 } token;
@@ -106,6 +106,7 @@ namespace lexer
 			}
 		}
 
+		tokens.push_back({ NEWL, 0, current_line });
 		return tokens;
 	}
 };
@@ -117,105 +118,80 @@ namespace parser
 	vector<token>::iterator end_token;
 	unsigned				errors;
 
-	void next_token()
+	void consume()
 	{
 		if (current_token != end_token)
 			++current_token;
 	}
 
-	void unexpected(lclass s)
+	token& next()
 	{
-		printf("\n (%d) parser: unexpected symbol: %s [expected %s]", current_token->line, types[current_token->code], types[s]);
-		errors++;
+		return *current_token;
 	}
 
-	bool peek(lclass s)
+	void error()
 	{
-		return (current_token->code == s);
+		throw std::exception("Parsing error");
 	}
 
-	bool next_if_equal(lclass s)
+	void expect(lclass tok)
 	{
-		if (current_token->code == s)
+		if (next().code == tok)
+			consume();
+		else
+			error();
+	}
+
+	void E();
+	void P()
+	{
+		if (next().is_number())
 		{
-			next_token();
-			return 1;
+			consume();
 		}
-
-		return 0;
-	}
-
-	bool expect(lclass s)
-	{
-		if (next_if_equal(s))
-			return 1;
-
-		unexpected(s);
-		return 0;
-	}
-
-	void expression();
-
-	void term()
-	{
-		if (current_token->code == MINUS)
+		else if (next().code == L_BR)
 		{
-			current_token->code = UNARY;
-			next_token();
-		}
-
-		if (next_if_equal(NUMBER))
-		{
-		}
-		else if (next_if_equal(L_BR))
-		{
-			expression();
+			consume();
+			E();
 			expect(R_BR);
+		}
+		else if (next().is_unary_operator())
+		{
+			next().code = UNARY;
+			consume();
+			P();
 		}
 		else
 		{
-			unexpected(UNDEF); // TODO
-			next_token();
+			error();
 		}
 	}
 
-	void expression()
+	void E()
 	{
-		if (current_token->code == MINUS)
-		{
-			current_token->code = UNARY;
-			next_token();
-		}
+		P();
 
-		term();
-
-		while (current_token->is_binary_operator())// TODO: crashes here if there is no \n at the end
+		while (next().is_binary_operator())
 		{
-			next_token();
-			term();
+			consume();
+			P();
 		}
 	}
 
-	void calculation()
-	{
-		do
-		{
-			expression();
-		} while (!next_if_equal(NEWL));
-	}
-
-	bool parse(vector<token>& tokens)
+	void parse(vector<token>& tokens)
 	{
 		if (tokens.empty())
-			return 0;
+			return;
 
 		errors			= 0;
 		current_token	= tokens.begin();
 		end_token		= tokens.end();
 
-		calculation();
-
-		return (errors == 0);
+		do 
+		{
+			E();
+			expect(NEWL);
+		} while (next().code != NEWL);
 	}
 };
 
@@ -304,7 +280,7 @@ namespace yard
 			{
 			case PLUS:		op1->number += op2->number;	break;
 			case MINUS:		op1->number -= op2->number;	break;
-			case MULT:	op1->number *= op2->number;	break;
+			case MULT:		op1->number *= op2->number;	break;
 			case DIVIDE:	op1->number /= op2->number;	break; // TODO: /0
 			case POWER:		op1->number = pow(op1->number, op2->number); break;
 			}
@@ -411,7 +387,7 @@ namespace yard
 			shunting_yard();
 			output.clear();
 			next_token();
-		} while (tokens.end() != current_token && current_token->code != NEWL && current_token->code != UNDEF);
+		} while (end_token != current_token && current_token->code != NEWL);
 	
 		return errors;
 	}
@@ -419,16 +395,21 @@ namespace yard
 
 int main(int argc, char* argv[])
 {
-	char buf_input[] =	"3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3"	"\n"
+	char buf_input[] =	"-3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3"	"\n"
 						"2 + 2 * 2"						"\n"
 						"100 * ( 2 + 12 ) / 14"			"\n"; // TODO: parser failed when 14 deleted
 
 	vector<token> tokens = lexer::parse(string(buf_input));
 
-	if (parser::parse(tokens))
+	try
 	{
+		parser::parse(tokens);
 		printf("\n [i] parser: no errors");
 		yard::postfix(tokens);
+	}
+	catch (std::exception&)
+	{
+		return 1;
 	}
 
 	return 0;
