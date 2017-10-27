@@ -1,7 +1,9 @@
+#include <iostream>
 #include <stack>
 #include <string>
 #include <vector>
 
+using std::cin;
 using std::stack;
 using std::string;
 using std::vector;
@@ -217,7 +219,7 @@ namespace parser
 		{
 			expression();
 			expect(NEWL);
-		} while (next().code != NEWL);
+		} while (current_token != end_token && next().code != NEWL);
 	}
 };
 
@@ -404,7 +406,7 @@ namespace yard
 		}
 	}
 
-	unsigned postfix(vector<token>& tokens)
+	unsigned postfix(vector<token>& tokens, vector<token*>& results)
 	{
 		current_token	= tokens.begin();
 		end_token		= tokens.end();
@@ -414,6 +416,9 @@ namespace yard
 		{
 			printf("\n");
 			shunting_yard();
+
+			results.insert(results.end(), output.begin(), output.end());
+
 			output.clear();
 			next_token();
 		} while (end_token != current_token && current_token->code != NEWL);
@@ -422,20 +427,58 @@ namespace yard
 	}
 };
 
-int main(int argc, char* argv[])
+bool test()
 {
 	char buf_input[] =	"-3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3""\n"
 						"2 + 2 * 2"						"\n"
 						"100 * ( 2 + 12 ) / 14"			"\n"
 						"- (14/2+3) * -( -3 + 8 / 2 )"	"\n";
 
+	vector<long long> control({ -3, 6, 100, 10 });
 	vector<token> tokens = lexer::parse(string(buf_input));
+	vector<token*> results;
 
 	try
 	{
 		parser::parse(tokens);
 		printf("\n [i] parser: no errors");
-		yard::postfix(tokens);
+		yard::postfix(tokens, results);
+
+		if (control.size() != results.size())
+			return false;
+
+		for (size_t i = 0; i < control.size(); ++i)
+			if (control[i] != results[i]->number)
+				return false;
+
+		return true;
+	}
+	catch (std::exception&)
+	{
+		return false;
+	}
+}
+
+int main(int argc, char* argv[])
+{
+	string str_input;
+
+	if (argc < 2)
+	{
+		getline(cin, str_input);
+	}
+	else
+	{
+		str_input = argv[1];
+	}
+
+	vector<token> tokens = lexer::parse(string(str_input));
+	vector<token*> results;
+
+	try
+	{
+		parser::parse(tokens);
+		yard::postfix(tokens, results);
 	}
 	catch (std::exception&)
 	{
